@@ -12,9 +12,12 @@ import { isRTLFor, tFor, type Lang } from "@/lib/i18n";
 import {
   clearHistory as clearHistoryStorage,
   commitScanQueue,
+  deleteCreditEntry as deleteCreditEntryStorage,
   deleteProduct as deleteProductStorage,
   getAllProducts,
   getHistory,
+  markCreditEntryPaid as markCreditEntryPaidStorage,
+  markPersonDebtsPaid as markPersonDebtsPaidStorage,
   saveProduct as saveProductStorage,
 } from "@/lib/storage";
 import type {
@@ -33,8 +36,15 @@ type InventoryContextValue = {
   refresh: () => Promise<void>;
   saveProduct: (p: Product) => Promise<void>;
   deleteProduct: (barcode: string) => Promise<void>;
-  commitQueue: (queue: ScanQueueItem[], mode: TransactionType) => Promise<void>;
+  commitQueue: (
+    queue: ScanQueueItem[],
+    mode: TransactionType,
+    personName?: string,
+  ) => Promise<void>;
   clearAllHistory: () => Promise<void>;
+  markEntryPaid: (entryId: string, paid: boolean) => Promise<void>;
+  markPersonPaid: (personName: string) => Promise<void>;
+  removeCreditEntry: (entryId: string) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -89,8 +99,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const commitQueue = useCallback(
-    async (queue: ScanQueueItem[], mode: TransactionType) => {
-      await commitScanQueue(queue, mode);
+    async (queue: ScanQueueItem[], mode: TransactionType, personName?: string) => {
+      await commitScanQueue(queue, mode, personName);
       await refresh();
     },
     [refresh],
@@ -100,6 +110,30 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     await clearHistoryStorage();
     await refresh();
   }, [refresh]);
+
+  const markEntryPaid = useCallback(
+    async (entryId: string, paid: boolean) => {
+      await markCreditEntryPaidStorage(entryId, paid);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const markPersonPaid = useCallback(
+    async (personName: string) => {
+      await markPersonDebtsPaidStorage(personName);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const removeCreditEntry = useCallback(
+    async (entryId: string) => {
+      await deleteCreditEntryStorage(entryId);
+      await refresh();
+    },
+    [refresh],
+  );
 
   const value = useMemo<InventoryContextValue>(
     () => ({
@@ -113,6 +147,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       deleteProduct,
       commitQueue,
       clearAllHistory,
+      markEntryPaid,
+      markPersonPaid,
+      removeCreditEntry,
     }),
     [
       products,
@@ -125,6 +162,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       deleteProduct,
       commitQueue,
       clearAllHistory,
+      markEntryPaid,
+      markPersonPaid,
+      removeCreditEntry,
     ],
   );
 

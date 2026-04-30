@@ -18,7 +18,7 @@ import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
 import { buildHistoryCSV } from "@/lib/storage";
 
-type Filter = "ALL" | "SALE" | "PURCHASE";
+type Filter = "ALL" | "SALE" | "PURCHASE" | "CREDIT";
 
 export default function HistoryScreen() {
   const colors = useColors();
@@ -36,7 +36,9 @@ export default function HistoryScreen() {
       const q = search.toLowerCase();
       list = list.filter(
         (h) =>
-          h.name.toLowerCase().includes(q) || h.barcode.includes(q),
+          h.name.toLowerCase().includes(q) ||
+          h.barcode.includes(q) ||
+          (h.personName ?? "").toLowerCase().includes(q),
       );
     }
     return list;
@@ -54,14 +56,23 @@ export default function HistoryScreen() {
 
   const totalSold = useMemo(
     () =>
-      history.filter((h) => h.type === "SALE").reduce((s, h) => s + h.qty, 0),
+      history
+        .filter((h) => h.type === "SALE")
+        .reduce((s, h) => s + (h.amount ?? 0), 0),
     [history],
   );
   const totalPurchased = useMemo(
     () =>
       history
         .filter((h) => h.type === "PURCHASE")
-        .reduce((s, h) => s + h.qty, 0),
+        .reduce((s, h) => s + (h.amount ?? 0), 0),
+    [history],
+  );
+  const totalCredit = useMemo(
+    () =>
+      history
+        .filter((h) => h.type === "CREDIT" && !h.paid)
+        .reduce((s, h) => s + (h.amount ?? 0), 0),
     [history],
   );
 
@@ -121,7 +132,6 @@ export default function HistoryScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -142,43 +152,40 @@ export default function HistoryScreen() {
           {t("historyTitle")}
         </Text>
 
-        {/* Summary */}
         <View style={[styles.summary, rtl && styles.rowReverse]}>
-          <SumItem
-            num={history.length}
-            label={t("transactions")}
-            color={colors.foreground}
-            mutedColor={colors.mutedForeground}
-          />
-          <View
-            style={[styles.divider, { backgroundColor: colors.border }]}
-          />
           <SumItem
             num={totalSold}
             label={t("sold")}
             color={colors.destructive}
             mutedColor={colors.mutedForeground}
+            isMoney
           />
-          <View
-            style={[styles.divider, { backgroundColor: colors.border }]}
-          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SumItem
             num={totalPurchased}
             label={t("purchased")}
             color={colors.success}
             mutedColor={colors.mutedForeground}
+            isMoney
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SumItem
+            num={totalCredit}
+            label={t("credit")}
+            color={colors.warning}
+            mutedColor={colors.mutedForeground}
+            isMoney
           />
           <TouchableOpacity
             style={[styles.csvBtn, { backgroundColor: colors.primary }]}
             onPress={exportCSV}
           >
             <Feather name="download" size={14} color="white" />
-            <Text style={styles.csvText}>{t("exportCSV")}</Text>
+            <Text style={styles.csvText}>CSV</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Filter tabs */}
       <View
         style={[
           styles.tabs,
@@ -191,6 +198,7 @@ export default function HistoryScreen() {
             { key: "ALL", label: t("all") },
             { key: "SALE", label: t("sale") },
             { key: "PURCHASE", label: t("purchase") },
+            { key: "CREDIT", label: t("credit") },
           ] as { key: Filter; label: string }[]
         ).map((tab) => {
           const active = filter === tab.key;
@@ -218,7 +226,6 @@ export default function HistoryScreen() {
         })}
       </View>
 
-      {/* Search */}
       <View
         style={[
           styles.searchWrap,
@@ -269,6 +276,18 @@ export default function HistoryScreen() {
           }}
           renderItem={({ item }) => {
             const isSale = item.type === "SALE";
+            const isCredit = item.type === "CREDIT";
+            const typeColor = isCredit
+              ? colors.warning
+              : isSale
+                ? colors.destructive
+                : colors.success;
+            const bgIcon = isCredit
+              ? "#fef3c7"
+              : isSale
+                ? "#fee2e2"
+                : "#dcfce7";
+            const sign = item.type === "PURCHASE" ? "+" : "−";
             return (
               <View
                 style={[
@@ -277,18 +296,17 @@ export default function HistoryScreen() {
                   rtl && styles.rowReverse,
                 ]}
               >
-                <View
-                  style={[
-                    styles.typeIcon,
-                    {
-                      backgroundColor: isSale ? "#fee2e2" : "#dcfce7",
-                    },
-                  ]}
-                >
+                <View style={[styles.typeIcon, { backgroundColor: bgIcon }]}>
                   <Feather
-                    name={isSale ? "arrow-up" : "arrow-down"}
+                    name={
+                      isCredit
+                        ? "user"
+                        : isSale
+                          ? "arrow-up"
+                          : "arrow-down"
+                    }
                     size={16}
-                    color={isSale ? colors.destructive : colors.success}
+                    color={typeColor}
                   />
                 </View>
                 <View style={styles.rowInfo}>
@@ -302,6 +320,18 @@ export default function HistoryScreen() {
                   >
                     {item.name}
                   </Text>
+                  {isCredit && item.personName ? (
+                    <Text
+                      style={[
+                        styles.rowPerson,
+                        { color: colors.warning },
+                        rtl && styles.rtlText,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.personName}
+                    </Text>
+                  ) : null}
                   <Text
                     style={[
                       styles.rowDate,
@@ -311,34 +341,43 @@ export default function HistoryScreen() {
                   >
                     {fmtDate(item.date)}
                   </Text>
-                  <Text
-                    style={[
-                      styles.rowCode,
-                      { color: colors.mutedForeground },
-                      rtl && styles.rtlText,
-                    ]}
-                  >
-                    {item.barcode}
-                  </Text>
                 </View>
                 <View style={styles.rowRight}>
-                  <Text
-                    style={[
-                      styles.rowQty,
-                      { color: isSale ? colors.destructive : colors.success },
-                    ]}
-                  >
-                    {isSale ? "−" : "+"}
+                  <Text style={[styles.rowQty, { color: typeColor }]}>
+                    {sign}
                     {item.qty}
                   </Text>
-                  <Text
-                    style={[
-                      styles.rowType,
-                      { color: colors.mutedForeground },
-                    ]}
-                  >
-                    {item.type}
-                  </Text>
+                  {(item.amount ?? 0) > 0 && (
+                    <Text
+                      style={[
+                        styles.rowAmount,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      {(item.amount ?? 0).toFixed(2)}
+                    </Text>
+                  )}
+                  {isCredit && (
+                    <View
+                      style={[
+                        styles.paidBadge,
+                        {
+                          backgroundColor: item.paid ? "#dcfce7" : "#fef3c7",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: item.paid ? "#166534" : "#b45309",
+                          fontSize: 8,
+                          fontWeight: "800",
+                          letterSpacing: 0.4,
+                        }}
+                      >
+                        {item.paid ? t("paid") : t("unpaid")}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             );
@@ -379,18 +418,21 @@ function SumItem({
   label,
   color,
   mutedColor,
+  isMoney,
 }: {
   num: number;
   label: string;
   color: string;
   mutedColor: string;
+  isMoney?: boolean;
 }) {
+  const display = isMoney ? num.toFixed(0) : String(num);
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
-      <Text style={{ fontSize: 20, fontWeight: "800", color }}>{num}</Text>
+      <Text style={{ fontSize: 16, fontWeight: "800", color }}>{display}</Text>
       <Text
         style={{
-          fontSize: 10,
+          fontSize: 9,
           color: mutedColor,
           textTransform: "uppercase",
           letterSpacing: 0.4,
@@ -427,26 +469,26 @@ function useStyles() {
       flexDirection: "row",
       alignItems: "center",
       gap: 5,
-      paddingHorizontal: 12,
+      paddingHorizontal: 11,
       paddingVertical: 7,
       borderRadius: 8,
     },
-    csvText: { color: "white", fontWeight: "700", fontSize: 12 },
+    csvText: { color: "white", fontWeight: "700", fontSize: 11 },
 
     tabs: {
       flexDirection: "row",
       paddingHorizontal: 12,
       paddingTop: 12,
       paddingBottom: 10,
-      gap: 8,
+      gap: 6,
       borderBottomWidth: 1,
     },
     tab: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: 20,
     },
-    tabText: { fontSize: 12, fontWeight: "700" },
+    tabText: { fontSize: 11, fontWeight: "700" },
 
     searchWrap: {
       flexDirection: "row",
@@ -490,15 +532,16 @@ function useStyles() {
     },
     rowInfo: { flex: 1 },
     rowName: { fontWeight: "700", fontSize: 13 },
-    rowDate: { fontSize: 11, marginTop: 1 },
-    rowCode: { fontSize: 10 },
-    rowRight: { alignItems: "flex-end" },
-    rowQty: { fontSize: 18, fontWeight: "800" },
-    rowType: {
-      fontSize: 9,
-      textTransform: "uppercase",
-      fontWeight: "600",
-      letterSpacing: 0.5,
+    rowPerson: { fontSize: 11, fontWeight: "700", marginTop: 1 },
+    rowDate: { fontSize: 10, marginTop: 1 },
+    rowRight: { alignItems: "flex-end", gap: 2 },
+    rowQty: { fontSize: 16, fontWeight: "800" },
+    rowAmount: { fontSize: 12, fontWeight: "700" },
+    paidBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      marginTop: 2,
     },
 
     clearBtn: {

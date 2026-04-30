@@ -129,6 +129,30 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importDoneMsg: (added: number, updated: number, skipped: number) =>
       `تمت إضافة ${added}، تحديث ${updated}، تخطي ${skipped}.`,
     importFailed: "فشل قراءة الملف",
+
+    creditMode: "وضع الدين",
+    confirmCredit: "تأكيد الدين",
+    credit: "دين",
+    tabDebts: "الديون",
+    debtsTitle: "الديون المستحقة",
+    totalOwed: "المجموع المستحق",
+    peopleOwing: "أشخاص مدينون",
+    unpaidItems: "عناصر غير مدفوعة",
+    personName: "اسم الشخص",
+    enterPersonName: "أدخل اسم الشخص",
+    personRequired: "اسم الشخص مطلوب",
+    noDebts: "لا توجد ديون مستحقة",
+    markPaid: "وضع كمدفوع",
+    markPaidConfirm: (name: string, amount: string) =>
+      `وضع جميع ديون ${name} (${amount}) كمدفوعة؟`,
+    paid: "مدفوع",
+    unpaid: "غير مدفوع",
+    sinceDate: (d: string) => `منذ ${d}`,
+    items_n: (n: number) => `${n} عنصر`,
+    perUnit: "للوحدة",
+    totalLabel: "الإجمالي",
+    queueTotal: "إجمالي السلة",
+    debtorBadge: (n: number) => `${n} مدين`,
   },
 
   en: {
@@ -257,6 +281,30 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importDoneMsg: (added: number, updated: number, skipped: number) =>
       `Added ${added}, updated ${updated}, skipped ${skipped}.`,
     importFailed: "Could not read the selected file",
+
+    creditMode: "CREDIT MODE",
+    confirmCredit: "Confirm Credit",
+    credit: "Credit",
+    tabDebts: "Debts",
+    debtsTitle: "Outstanding Debts",
+    totalOwed: "Total Owed",
+    peopleOwing: "People",
+    unpaidItems: "Unpaid Items",
+    personName: "Person's Name",
+    enterPersonName: "Enter person's name",
+    personRequired: "Person's name is required",
+    noDebts: "No outstanding debts",
+    markPaid: "Mark as Paid",
+    markPaidConfirm: (name: string, amount: string) =>
+      `Mark all of ${name}'s debts (${amount}) as paid?`,
+    paid: "Paid",
+    unpaid: "Unpaid",
+    sinceDate: (d: string) => `since ${d}`,
+    items_n: (n: number) => `${n} item(s)`,
+    perUnit: "per unit",
+    totalLabel: "Total",
+    queueTotal: "Cart Total",
+    debtorBadge: (n: number) => `${n} owe`,
   },
 };
 

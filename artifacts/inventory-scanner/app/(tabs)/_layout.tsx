@@ -69,6 +69,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="debts"
+        options={{
+          title: t("tabDebts"),
+          tabBarIcon: ({ color }) => (
+            <Feather name="users" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: t("tabHistory"),

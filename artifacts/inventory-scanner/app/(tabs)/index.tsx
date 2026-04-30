@@ -21,6 +21,8 @@ import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
 import type { ScanMode, ScanQueueItem } from "@/lib/types";
 
+const MODE_CYCLE: ScanMode[] = ["SALE", "PURCHASE", "CREDIT"];
+
 export default function ScannerScreen() {
   const colors = useColors();
   const { t, rtl } = useT();
@@ -34,6 +36,8 @@ export default function ScannerScreen() {
   const [cameraActive, setCameraActive] = useState<boolean>(true);
   const [manualOpen, setManualOpen] = useState<boolean>(false);
   const [manualCode, setManualCode] = useState<string>("");
+  const [personOpen, setPersonOpen] = useState<boolean>(false);
+  const [personName, setPersonName] = useState<string>("");
 
   const isWeb = Platform.OS === "web";
   const canUseCamera = !isWeb && permission?.granted;
@@ -48,7 +52,31 @@ export default function ScannerScreen() {
     [scanQueue],
   );
 
-  const modeColor = mode === "SALE" ? colors.destructive : colors.success;
+  const totalAmount = useMemo(
+    () => scanQueue.reduce((s, i) => s + i.qty * (i.price ?? 0), 0),
+    [scanQueue],
+  );
+
+  const modeColor =
+    mode === "SALE"
+      ? colors.destructive
+      : mode === "PURCHASE"
+        ? colors.success
+        : colors.warning;
+
+  const modeLabel =
+    mode === "SALE"
+      ? t("saleMode")
+      : mode === "PURCHASE"
+        ? t("purchaseMode")
+        : t("creditMode");
+
+  const confirmLabel =
+    mode === "SALE"
+      ? t("confirmSale")
+      : mode === "PURCHASE"
+        ? t("confirmPurchase")
+        : t("confirmCredit");
 
   const handleBarcode = useCallback(
     (data: string) => {
@@ -94,6 +122,7 @@ export default function ScannerScreen() {
             name: displayName,
             qty: 1,
             unit: product.unit,
+            price: product.price ?? 0,
           },
         ];
       });
@@ -134,30 +163,44 @@ export default function ScannerScreen() {
     );
   };
 
+  const performCommit = async (name?: string) => {
+    try {
+      await commitQueue(scanQueue, mode, name);
+      setScanQueue([]);
+      setPersonName("");
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+      Alert.alert("✓", t("savedSuccess"));
+    } catch {
+      Alert.alert("Error", t("dbError"));
+    }
+  };
+
   const confirmTransaction = () => {
     if (!scanQueue.length) return;
+    if (mode === "CREDIT") {
+      setPersonOpen(true);
+      return;
+    }
     Alert.alert(
       t("confirmTitle"),
       t("confirmMsg", totalItems, scanQueue.length),
       [
         { text: t("cancel"), style: "cancel" },
-        {
-          text: mode === "SALE" ? t("confirmSale") : t("confirmPurchase"),
-          onPress: async () => {
-            try {
-              await commitQueue(scanQueue, mode);
-              setScanQueue([]);
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              ).catch(() => {});
-              Alert.alert("✓", t("savedSuccess"));
-            } catch {
-              Alert.alert("Error", t("dbError"));
-            }
-          },
-        },
+        { text: confirmLabel, onPress: () => performCommit() },
       ],
     );
+  };
+
+  const submitPersonAndCommit = () => {
+    if (!personName.trim()) {
+      Alert.alert("", t("personRequired"));
+      return;
+    }
+    const name = personName.trim();
+    setPersonOpen(false);
+    performCommit(name);
   };
 
   useEffect(() => {
@@ -167,10 +210,15 @@ export default function ScannerScreen() {
   }, [permission, requestPermission, isWeb]);
 
   const styles = useStyles();
-
   const headerTopPadding = Platform.OS === "web" ? 67 : insets.top;
 
-  // Camera area
+  const cycleMode = () => {
+    setMode((m) => {
+      const idx = MODE_CYCLE.indexOf(m);
+      return MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!;
+    });
+  };
+
   const renderCameraArea = () => {
     if (isWeb) {
       return (
@@ -244,11 +292,9 @@ export default function ScannerScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Camera section */}
       <View style={styles.cameraBox}>
         {renderCameraArea()}
 
-        {/* Top bar */}
         <View
           style={[
             styles.topBar,
@@ -263,20 +309,17 @@ export default function ScannerScreen() {
             <Feather name="settings" size={18} color="white" />
           </TouchableOpacity>
 
-          <Text style={styles.modeLabel}>
-            {mode === "SALE" ? t("saleMode") : t("purchaseMode")}
-          </Text>
+          <Text style={styles.modeLabel}>{modeLabel}</Text>
 
           <TouchableOpacity
             style={[styles.modeBtn, { backgroundColor: modeColor }]}
-            onPress={() => setMode((m) => (m === "SALE" ? "PURCHASE" : "SALE"))}
+            onPress={cycleMode}
           >
             <Feather name="repeat" size={14} color="white" />
             <Text style={styles.modeBtnText}>{t("switchMode")}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Low stock badge */}
         {lowStockCount > 0 && (
           <TouchableOpacity
             style={[
@@ -293,7 +336,6 @@ export default function ScannerScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Action row: pause + manual */}
         <View
           style={[
             styles.cameraActions,
@@ -321,7 +363,6 @@ export default function ScannerScreen() {
         </View>
       </View>
 
-      {/* Queue */}
       <View style={styles.listArea}>
         <View style={[styles.listHeader, rtl && styles.rowReverse]}>
           <Text
@@ -367,8 +408,8 @@ export default function ScannerScreen() {
           <FlatList
             data={scanQueue}
             keyExtractor={(i) => i.barcode}
-            contentContainerStyle={{ paddingBottom: 16 }}
-            scrollEnabled={scanQueue.length > 0}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            scrollEnabled
             renderItem={({ item }) => (
               <View
                 style={[
@@ -396,6 +437,9 @@ export default function ScannerScreen() {
                     ]}
                   >
                     {item.barcode}
+                    {item.price > 0
+                      ? ` · ${item.price.toFixed(2)} ${t("perUnit")}`
+                      : ""}
                   </Text>
                 </View>
                 <View style={styles.qtyRow}>
@@ -429,6 +473,18 @@ export default function ScannerScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+                <View style={styles.amtBox}>
+                  {item.price > 0 ? (
+                    <Text
+                      style={[
+                        styles.amtText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      {(item.price * item.qty).toFixed(2)}
+                    </Text>
+                  ) : null}
+                </View>
                 <TouchableOpacity
                   onPress={() => removeItem(item.barcode)}
                   style={[
@@ -441,6 +497,23 @@ export default function ScannerScreen() {
               </View>
             )}
           />
+        )}
+
+        {scanQueue.length > 0 && totalAmount > 0 && (
+          <View
+            style={[
+              styles.totalRow,
+              { backgroundColor: colors.secondary },
+              rtl && styles.rowReverse,
+            ]}
+          >
+            <Text style={[styles.totalLabel, { color: colors.mutedForeground }]}>
+              {t("queueTotal")}
+            </Text>
+            <Text style={[styles.totalValue, { color: colors.foreground }]}>
+              {totalAmount.toFixed(2)}
+            </Text>
+          </View>
         )}
 
         <TouchableOpacity
@@ -458,7 +531,7 @@ export default function ScannerScreen() {
         >
           <Feather name="check-circle" size={20} color="white" />
           <Text style={[styles.confirmText, rtl && styles.rtlText]}>
-            {mode === "SALE" ? t("confirmSale") : t("confirmPurchase")}
+            {confirmLabel}
             {scanQueue.length > 0 ? ` ${t("items", totalItems)}` : ""}
           </Text>
         </TouchableOpacity>
@@ -506,6 +579,62 @@ export default function ScannerScreen() {
               >
                 <Text style={{ color: "white", fontWeight: "700" }}>
                   {t("add")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Person name modal (for credit) */}
+      <Modal
+        visible={personOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPersonOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+              {t("personName")}
+            </Text>
+            <View
+              style={[
+                styles.creditSummary,
+                { backgroundColor: colors.secondary },
+              ]}
+            >
+              <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>
+                {t("items_n", totalItems)}
+                {totalAmount > 0 ? `  ·  ${totalAmount.toFixed(2)}` : ""}
+              </Text>
+            </View>
+            <TextInput
+              style={[
+                styles.modalInput,
+                { borderColor: colors.border, color: colors.foreground },
+              ]}
+              value={personName}
+              onChangeText={setPersonName}
+              placeholder={t("enterPersonName")}
+              placeholderTextColor={colors.mutedForeground}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.secondary }]}
+                onPress={() => setPersonOpen(false)}
+              >
+                <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+                  {t("cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.warning }]}
+                onPress={submitPersonAndCommit}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  {t("confirmCredit")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -691,7 +820,7 @@ function useStyles() {
       padding: 11,
       borderRadius: 12,
       marginBottom: 7,
-      gap: 10,
+      gap: 8,
       shadowColor: "#000",
       shadowOpacity: 0.04,
       shadowOffset: { width: 0, height: 1 },
@@ -712,6 +841,9 @@ function useStyles() {
     qtyBtnText: { fontSize: 18, fontWeight: "700", lineHeight: 20 },
     qtyNum: { fontSize: 16, fontWeight: "800", minWidth: 22, textAlign: "center" },
 
+    amtBox: { minWidth: 50, alignItems: "flex-end" },
+    amtText: { fontSize: 13, fontWeight: "700" },
+
     delBtn: {
       width: 32,
       height: 32,
@@ -719,6 +851,23 @@ function useStyles() {
       alignItems: "center",
       justifyContent: "center",
     },
+
+    totalRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      marginTop: 4,
+    },
+    totalLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    totalValue: { fontSize: 18, fontWeight: "800" },
 
     confirmBtn: {
       flexDirection: "row",
@@ -751,6 +900,11 @@ function useStyles() {
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 10,
+    },
+    creditSummary: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
     },
   });
 }

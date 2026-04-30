@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type {
+  DebtSummary,
   HistoryEntry,
   Product,
   ScanQueueItem,
@@ -63,27 +64,39 @@ export async function getLowStockProducts(): Promise<Product[]> {
 export async function commitScanQueue(
   queue: ScanQueueItem[],
   mode: TransactionType,
+  personName?: string,
 ): Promise<void> {
   const products = await getAllProducts();
   const now = new Date().toISOString();
   const history = await getHistory(10000);
 
   for (const item of queue) {
-    const delta = mode === "SALE" ? -item.qty : item.qty;
+    // SALE and CREDIT both reduce stock; PURCHASE adds.
+    const delta = mode === "PURCHASE" ? item.qty : -item.qty;
     const idx = products.findIndex((p) => p.barcode === item.barcode);
+    let unitPrice = item.price;
     if (idx >= 0) {
       const updated = { ...products[idx]! };
       updated.stock = Math.max(0, updated.stock + delta);
       products[idx] = updated;
+      if (!unitPrice) unitPrice = products[idx]!.price;
     }
-    history.unshift({
+    const amount = unitPrice * item.qty;
+    const entry: HistoryEntry = {
       id: genId(),
       barcode: item.barcode,
       name: item.name,
       type: mode,
       qty: item.qty,
+      unitPrice,
+      amount,
       date: now,
-    });
+    };
+    if (mode === "CREDIT") {
+      entry.personName = (personName ?? "").trim() || "Unknown";
+      entry.paid = false;
+    }
+    history.unshift(entry);
   }
 
   await writeProducts(products);
@@ -95,7 +108,16 @@ export async function getHistory(limit = 500): Promise<HistoryEntry[]> {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as HistoryEntry[];
-    return parsed.slice(0, limit);
+    // Backward-compat: ensure new fields are present.
+    const normalized = parsed.map((h) => ({
+      ...h,
+      unitPrice: typeof h.unitPrice === "number" ? h.unitPrice : 0,
+      amount:
+        typeof h.amount === "number"
+          ? h.amount
+          : (typeof h.unitPrice === "number" ? h.unitPrice : 0) * h.qty,
+    }));
+    return normalized.slice(0, limit);
   } catch {
     return [];
   }
@@ -103,6 +125,69 @@ export async function getHistory(limit = 500): Promise<HistoryEntry[]> {
 
 export async function clearHistory(): Promise<void> {
   await AsyncStorage.removeItem(HISTORY_KEY);
+}
+
+async function writeHistory(history: HistoryEntry[]): Promise<void> {
+  await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+export async function markCreditEntryPaid(
+  entryId: string,
+  paid: boolean,
+): Promise<void> {
+  const history = await getHistory(10000);
+  const idx = history.findIndex((h) => h.id === entryId);
+  if (idx < 0) return;
+  const entry = { ...history[idx]! };
+  if (entry.type !== "CREDIT") return;
+  entry.paid = paid;
+  entry.paidAt = paid ? new Date().toISOString() : undefined;
+  history[idx] = entry;
+  await writeHistory(history);
+}
+
+export async function markPersonDebtsPaid(personName: string): Promise<void> {
+  const history = await getHistory(10000);
+  const now = new Date().toISOString();
+  const next = history.map((h) =>
+    h.type === "CREDIT" && (h.personName ?? "Unknown") === personName && !h.paid
+      ? { ...h, paid: true, paidAt: now }
+      : h,
+  );
+  await writeHistory(next);
+}
+
+export async function deleteCreditEntry(entryId: string): Promise<void> {
+  const history = await getHistory(10000);
+  const next = history.filter((h) => h.id !== entryId);
+  await writeHistory(next);
+}
+
+export function summarizeDebts(history: HistoryEntry[]): DebtSummary[] {
+  const map = new Map<string, DebtSummary>();
+  for (const h of history) {
+    if (h.type !== "CREDIT") continue;
+    if (h.paid) continue;
+    const key = (h.personName ?? "Unknown").trim() || "Unknown";
+    const cur = map.get(key);
+    if (cur) {
+      cur.totalOwed += h.amount;
+      cur.itemCount += h.qty;
+      cur.entries.push(h);
+      if (h.date < cur.oldestDate) cur.oldestDate = h.date;
+    } else {
+      map.set(key, {
+        personName: key,
+        totalOwed: h.amount,
+        itemCount: h.qty,
+        entries: [h],
+        oldestDate: h.date,
+      });
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => b.totalOwed - a.totalOwed,
+  );
 }
 
 function csvEscape(value: string | number | null | undefined): string {
@@ -125,11 +210,12 @@ export function buildProductsCSV(products: Product[]): string {
 }
 
 export function buildHistoryCSV(history: HistoryEntry[]): string {
-  const header = "ID,Barcode,Name,Type,Qty,Date\n";
+  const header =
+    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid\n";
   const rows = history
     .map(
       (h) =>
-        `${csvEscape(h.id)},${csvEscape(h.barcode)},${csvEscape(h.name)},${csvEscape(h.type)},${h.qty},${csvEscape(h.date)}`,
+        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""}`,
     )
     .join("\n");
   return header + rows;
