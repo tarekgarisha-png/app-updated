@@ -157,6 +157,15 @@ export default function ProductsScreen() {
           />
         </TouchableOpacity>
         <TouchableOpacity
+          style={[
+            styles.iconBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+          onPress={() => router.push("/import-csv")}
+        >
+          <Feather name="upload" size={18} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: colors.primary }]}
           onPress={() => router.push("/product-form")}
         >

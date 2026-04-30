@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BarcodeScannerModal } from "@/components/BarcodeScannerModal";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
@@ -51,6 +52,7 @@ export default function ProductFormScreen() {
   );
 
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [scannerOpen, setScannerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (editing && existing) {
@@ -135,16 +137,45 @@ export default function ProductFormScreen() {
         }}
         bottomOffset={20}
       >
-        <Field
-          label={t("barcode")}
-          rtl={rtl}
-          value={form.barcode}
-          onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))}
-          placeholder="123456789"
-          editable={!editing}
-          dim={editing}
-          colors={colors}
-        />
+        <View style={{ marginBottom: 14 }}>
+          <Text
+            style={[
+              styles.fieldLabel,
+              { color: colors.mutedForeground },
+              rtl && styles.rtlText,
+            ]}
+          >
+            {t("barcode")}
+          </Text>
+          <View style={[styles.barcodeRow, rtl && styles.rowReverse]}>
+            <TextInput
+              style={[
+                styles.barcodeInput,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: editing ? colors.secondary : colors.card,
+                  color: editing ? colors.mutedForeground : colors.foreground,
+                  textAlign: rtl ? "right" : "left",
+                },
+              ]}
+              value={form.barcode}
+              onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))}
+              placeholder="123456789"
+              placeholderTextColor={colors.mutedForeground}
+              editable={!editing}
+            />
+            {!editing && (
+              <TouchableOpacity
+                style={[styles.scanBtn, { backgroundColor: colors.primary }]}
+                onPress={() => setScannerOpen(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="maximize" size={18} color="white" />
+                <Text style={styles.scanBtnText}>{t("scanBarcode")}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         <Field
           label={`${t("productName")} (EN)`}
@@ -223,6 +254,12 @@ export default function ProductFormScreen() {
           </Text>
         </TouchableOpacity>
       </KeyboardAwareScrollViewCompat>
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanned={(code) => setForm((f) => ({ ...f, barcode: code }))}
+      />
     </View>
   );
 }
@@ -324,5 +361,31 @@ function useStyles() {
       marginTop: 8,
     },
     saveBtnText: { color: "white", fontWeight: "700", fontSize: 15 },
+
+    fieldLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    barcodeRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
+    barcodeInput: {
+      flex: 1,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 10,
+      fontSize: 15,
+    },
+    scanBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+    },
+    scanBtnText: { color: "white", fontWeight: "700", fontSize: 12 },
   });
 }

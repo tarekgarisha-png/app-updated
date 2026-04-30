@@ -38,6 +38,8 @@ Bilingual (English/Arabic + RTL) barcode-based inventory app for retail.
   - Manual barcode entry (works on web)
   - Scan queue with quantity adjustments before commit
   - Product CRUD (`app/product-form.tsx`) with low-stock alerts
+  - In-form barcode camera scan via `components/BarcodeScannerModal.tsx`
+  - Bulk CSV import (`app/import-csv.tsx` + `lib/csvImport.ts`); uses `expo-document-picker` on native, hidden `<input type="file">` on web; tolerant header mapping (Barcode/SKU/Code, Name, Arabic Name, Stock, Min Stock, Unit, Price)
   - Transaction history with filtering, search, and CSV export (`expo-file-system/legacy` + `expo-sharing`; web uses Blob download)
   - Settings screen for language toggle (EN/AR)
 - **State**: `contexts/InventoryContext.tsx` (provider + `useT` hook)

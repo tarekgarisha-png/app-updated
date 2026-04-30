@@ -109,6 +109,26 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     settings: "الإعدادات",
     pause: "إيقاف",
     resume: "تشغيل",
+
+    scanBarcode: "مسح الباركود",
+    importCSV: "استيراد CSV",
+    importTitle: "استيراد منتجات",
+    importChooseFile: "اختر ملف CSV",
+    importPickFile: "اختر ملف",
+    importDownloadSample: "تنزيل ملف عينة",
+    importInstructions:
+      "ملف CSV يحتوي على هذه الأعمدة: Barcode (مطلوب)، Name (مطلوب)، Arabic Name، Stock، Min Stock، Unit، Price.",
+    importPreview: (n: number) => `جاهز للاستيراد: ${n} صف`,
+    importNoRows: "لم يتم العثور على صفوف صالحة",
+    importHeaderError:
+      "صفوف الترويسة المفقودة. تأكد من وجود عمودي Barcode و Name.",
+    importErrors: (n: number) => `${n} صف به أخطاء`,
+    importConfirm: "استيراد",
+    importing: "جارٍ الاستيراد...",
+    importDoneTitle: "اكتمل الاستيراد",
+    importDoneMsg: (added: number, updated: number, skipped: number) =>
+      `تمت إضافة ${added}، تحديث ${updated}، تخطي ${skipped}.`,
+    importFailed: "فشل قراءة الملف",
   },
 
   en: {
@@ -217,6 +237,26 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     settings: "Settings",
     pause: "Pause",
     resume: "Resume",
+
+    scanBarcode: "Scan Barcode",
+    importCSV: "Import CSV",
+    importTitle: "Import Products",
+    importChooseFile: "Choose CSV file",
+    importPickFile: "Pick file",
+    importDownloadSample: "Download sample",
+    importInstructions:
+      "CSV must include columns: Barcode (required), Name (required), Arabic Name, Stock, Min Stock, Unit, Price.",
+    importPreview: (n: number) => `Ready to import: ${n} row(s)`,
+    importNoRows: "No valid rows found in file",
+    importHeaderError:
+      "Header row is missing or invalid. Make sure Barcode and Name columns exist.",
+    importErrors: (n: number) => `${n} row(s) had errors`,
+    importConfirm: "Import",
+    importing: "Importing...",
+    importDoneTitle: "Import complete",
+    importDoneMsg: (added: number, updated: number, skipped: number) =>
+      `Added ${added}, updated ${updated}, skipped ${skipped}.`,
+    importFailed: "Could not read the selected file",
   },
 };
 
