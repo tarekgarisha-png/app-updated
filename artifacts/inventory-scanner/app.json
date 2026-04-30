@@ -14,9 +14,17 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.replit.inventoryscanner",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan product barcodes.",
+        "NSPhotoLibraryUsageDescription": "This app saves CSV exports to your device."
+      }
     },
-    "android": {},
+    "android": {
+      "package": "com.replit.inventoryscanner",
+      "permissions": ["CAMERA"]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -28,7 +36,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Inventory Scanner to access your camera so you can scan product barcodes."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
