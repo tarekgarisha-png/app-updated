@@ -23,7 +23,11 @@
     },
     "android": {
       "package": "com.replit.inventoryscanner",
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -47,6 +51,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "46cb6f08-5f51-4ea0-979b-ca48b893cdf0"
+      }
     }
   }
 }
