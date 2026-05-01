@@ -1,6 +1,5 @@
 import { Feather } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -8,17 +7,18 @@ import {
   FlatList,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  Vibration,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
+import { beepAndShake } from "@/lib/beep";
 import type { ScanMode, ScanQueueItem } from "@/lib/types";
 
 const MODE_CYCLE: ScanMode[] = ["SALE", "PURCHASE", "CREDIT"];
@@ -38,6 +38,8 @@ export default function ScannerScreen() {
   const [manualCode, setManualCode] = useState<string>("");
   const [personOpen, setPersonOpen] = useState<boolean>(false);
   const [personName, setPersonName] = useState<string>("");
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
+  const [pickerSearch, setPickerSearch] = useState<string>("");
 
   const isWeb = Platform.OS === "web";
   const canUseCamera = !isWeb && permission?.granted;
@@ -56,6 +58,17 @@ export default function ScannerScreen() {
     () => scanQueue.reduce((s, i) => s + i.qty * (i.price ?? 0), 0),
     [scanQueue],
   );
+
+  const filteredPickerProducts = useMemo(() => {
+    const q = pickerSearch.toLowerCase().trim();
+    if (!q) return products;
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.nameAr.includes(q) ||
+        p.barcode.includes(q),
+    );
+  }, [products, pickerSearch]);
 
   const modeColor =
     mode === "SALE"
@@ -135,8 +148,7 @@ export default function ScannerScreen() {
     ({ data }: { data: string }) => {
       if (scanned) return;
       setScanned(true);
-      Vibration.vibrate(80);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      beepAndShake().catch(() => {});
       handleBarcode(data);
     },
     [scanned, handleBarcode],
@@ -168,9 +180,7 @@ export default function ScannerScreen() {
       await commitQueue(scanQueue, mode, name);
       setScanQueue([]);
       setPersonName("");
-      Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success,
-      ).catch(() => {});
+      beepAndShake().catch(() => {});
       Alert.alert("✓", t("savedSuccess"));
     } catch {
       Alert.alert("Error", t("dbError"));
@@ -342,6 +352,12 @@ export default function ScannerScreen() {
             rtl ? styles.actionsLeft : styles.actionsRight,
           ]}
         >
+          <TouchableOpacity
+            style={styles.pauseBtn}
+            onPress={() => { setPickerSearch(""); setPickerOpen(true); }}
+          >
+            <Feather name="search" size={16} color="white" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.pauseBtn}
             onPress={() => setManualOpen(true)}
@@ -582,6 +598,183 @@ export default function ScannerScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Product picker modal (add by name) */}
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View
+            style={[
+              styles.pickerSheet,
+              { backgroundColor: colors.background },
+            ]}
+          >
+            <View
+              style={[
+                styles.pickerHeader,
+                { borderColor: colors.border },
+                rtl && styles.rowReverse,
+              ]}
+            >
+              <Text
+                style={[styles.pickerTitle, { color: colors.foreground }]}
+              >
+                {t("addByName")}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.closeBtn2,
+                  { backgroundColor: colors.secondary },
+                ]}
+                onPress={() => setPickerOpen(false)}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <View
+              style={[
+                styles.pickerSearchWrap,
+                { borderColor: colors.border },
+                rtl && styles.rowReverse,
+              ]}
+            >
+              <Feather
+                name="search"
+                size={16}
+                color={colors.mutedForeground}
+              />
+              <TextInput
+                style={[
+                  styles.pickerSearchInput,
+                  { color: colors.foreground },
+                  rtl && { textAlign: "right" as const },
+                ]}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
+                placeholder={t("searchProducts")}
+                placeholderTextColor={colors.mutedForeground}
+                autoFocus
+              />
+              {!!pickerSearch && (
+                <TouchableOpacity onPress={() => setPickerSearch("")}>
+                  <Feather
+                    name="x-circle"
+                    size={15}
+                    color={colors.mutedForeground}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              {filteredPickerProducts.length === 0 ? (
+                <View style={styles.pickerEmpty}>
+                  <Text
+                    style={{ color: colors.mutedForeground, fontSize: 14 }}
+                  >
+                    {t("noProducts")}
+                  </Text>
+                </View>
+              ) : (
+                filteredPickerProducts.map((p) => {
+                  const displayName =
+                    rtl && p.nameAr ? p.nameAr : p.name;
+                  const inQueue = scanQueue.find(
+                    (i) => i.barcode === p.barcode,
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={p.barcode}
+                      style={[
+                        styles.pickerItem,
+                        {
+                          backgroundColor: inQueue
+                            ? colors.primary + "18"
+                            : colors.card,
+                          borderColor: inQueue
+                            ? colors.primary
+                            : colors.border,
+                        },
+                        rtl && styles.rowReverse,
+                      ]}
+                      onPress={() => {
+                        handleBarcode(p.barcode);
+                        beepAndShake().catch(() => {});
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.pickerItemName,
+                            { color: colors.foreground },
+                            rtl && { textAlign: "right" as const },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {displayName}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.pickerItemMeta,
+                            { color: colors.mutedForeground },
+                            rtl && { textAlign: "right" as const },
+                          ]}
+                        >
+                          {p.stock} {p.unit}
+                          {p.price > 0
+                            ? ` · ${p.price.toFixed(2)}`
+                            : ""}
+                        </Text>
+                      </View>
+                      <View style={styles.pickerItemRight}>
+                        {inQueue ? (
+                          <>
+                            <View
+                              style={[
+                                styles.inQueueBadge,
+                                { backgroundColor: colors.primary },
+                              ]}
+                            >
+                              <Text
+                                style={{
+                                  color: "white",
+                                  fontSize: 11,
+                                  fontWeight: "800",
+                                }}
+                              >
+                                ×{inQueue.qty}
+                              </Text>
+                            </View>
+                          </>
+                        ) : (
+                          <View
+                            style={[
+                              styles.addIconWrap,
+                              { backgroundColor: colors.secondary },
+                            ]}
+                          >
+                            <Feather
+                              name="plus"
+                              size={16}
+                              color={colors.primary}
+                            />
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -905,6 +1098,74 @@ function useStyles() {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,
+    },
+
+    pickerBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.4)",
+      justifyContent: "flex-end",
+    },
+    pickerSheet: {
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: "75%",
+      paddingBottom: 8,
+    },
+    pickerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+    },
+    pickerTitle: { fontSize: 16, fontWeight: "800" },
+    closeBtn2: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    pickerSearchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginHorizontal: 14,
+      marginVertical: 10,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+    },
+    pickerSearchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
+    pickerEmpty: {
+      alignItems: "center",
+      padding: 24,
+    },
+    pickerItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginHorizontal: 14,
+      marginBottom: 8,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 10,
+    },
+    pickerItemName: { fontSize: 13, fontWeight: "700" },
+    pickerItemMeta: { fontSize: 10, marginTop: 2 },
+    pickerItemRight: { justifyContent: "center", alignItems: "center" },
+    inQueueBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
+    },
+    addIconWrap: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
     },
   });
 }

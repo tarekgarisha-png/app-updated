@@ -16,6 +16,7 @@ import { BarcodeScannerModal } from "@/components/BarcodeScannerModal";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
+import { generateAutoBarcode } from "@/lib/storage";
 
 type FormState = {
   barcode: string;
@@ -53,9 +54,12 @@ export default function ProductFormScreen() {
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [scannerOpen, setScannerOpen] = useState<boolean>(false);
+  const [noBarcode, setNoBarcode] = useState<boolean>(false);
 
   useEffect(() => {
     if (editing && existing) {
+      const isAutoId = existing.barcode.startsWith("#");
+      setNoBarcode(isAutoId);
       setForm({
         barcode: existing.barcode,
         name: existing.name,
@@ -72,10 +76,24 @@ export default function ProductFormScreen() {
     }
   }, [editing, existing, params.barcode]);
 
+  const toggleNoBarcode = () => {
+    if (noBarcode) {
+      setNoBarcode(false);
+      setForm((f) => ({ ...f, barcode: "" }));
+    } else {
+      setNoBarcode(true);
+      setForm((f) => ({ ...f, barcode: generateAutoBarcode() }));
+    }
+  };
+
   const handleSave = async () => {
     if (!form.barcode.trim()) {
-      Alert.alert("", t("barcodeRequired"));
-      return;
+      if (noBarcode) {
+        setForm((f) => ({ ...f, barcode: generateAutoBarcode() }));
+      } else {
+        Alert.alert("", t("barcodeRequired"));
+        return;
+      }
     }
     if (!form.name.trim()) {
       Alert.alert("", t("nameRequired"));
@@ -137,44 +155,126 @@ export default function ProductFormScreen() {
         }}
         bottomOffset={20}
       >
+        {/* Barcode field */}
         <View style={{ marginBottom: 14 }}>
-          <Text
+          <View
             style={[
-              styles.fieldLabel,
-              { color: colors.mutedForeground },
-              rtl && styles.rtlText,
+              styles.labelRow,
+              rtl && styles.rowReverse,
             ]}
           >
-            {t("barcode")}
-          </Text>
-          <View style={[styles.barcodeRow, rtl && styles.rowReverse]}>
-            <TextInput
+            <Text
               style={[
-                styles.barcodeInput,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: editing ? colors.secondary : colors.card,
-                  color: editing ? colors.mutedForeground : colors.foreground,
-                  textAlign: rtl ? "right" : "left",
-                },
+                styles.fieldLabel,
+                { color: colors.mutedForeground },
+                rtl && styles.rtlText,
               ]}
-              value={form.barcode}
-              onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))}
-              placeholder="123456789"
-              placeholderTextColor={colors.mutedForeground}
-              editable={!editing}
-            />
+            >
+              {t("barcode")}
+            </Text>
             {!editing && (
               <TouchableOpacity
-                style={[styles.scanBtn, { backgroundColor: colors.primary }]}
-                onPress={() => setScannerOpen(true)}
-                activeOpacity={0.8}
+                onPress={toggleNoBarcode}
+                style={[
+                  styles.noBarcodeBtn,
+                  {
+                    backgroundColor: noBarcode
+                      ? colors.warning + "22"
+                      : colors.secondary,
+                    borderColor: noBarcode ? colors.warning : colors.border,
+                  },
+                ]}
               >
-                <Feather name="maximize" size={18} color="white" />
-                <Text style={styles.scanBtnText}>{t("scanBarcode")}</Text>
+                <Feather
+                  name={noBarcode ? "check-square" : "square"}
+                  size={13}
+                  color={noBarcode ? colors.warning : colors.mutedForeground}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "600",
+                    color: noBarcode ? colors.warning : colors.mutedForeground,
+                  }}
+                >
+                  {t("noBarcode")}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
+
+          {noBarcode ? (
+            <View
+              style={[
+                styles.autoBarcodeBox,
+                { backgroundColor: colors.secondary, borderColor: colors.border },
+              ]}
+            >
+              <Feather name="hash" size={16} color={colors.mutedForeground} />
+              <Text
+                style={{ flex: 1, color: colors.mutedForeground, fontSize: 13 }}
+                numberOfLines={1}
+              >
+                {form.barcode || "..."}
+              </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  setForm((f) => ({ ...f, barcode: generateAutoBarcode() }))
+                }
+                style={[
+                  styles.regenBtn,
+                  { backgroundColor: colors.primary + "22" },
+                ]}
+              >
+                <Feather name="refresh-cw" size={13} color={colors.primary} />
+                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: "700" }}>
+                  {t("generateId")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.barcodeRow, rtl && styles.rowReverse]}>
+              <TextInput
+                style={[
+                  styles.barcodeInput,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: editing ? colors.secondary : colors.card,
+                    color:
+                      editing ? colors.mutedForeground : colors.foreground,
+                    textAlign: rtl ? "right" : "left",
+                  },
+                ]}
+                value={form.barcode}
+                onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))}
+                placeholder="123456789"
+                placeholderTextColor={colors.mutedForeground}
+                editable={!editing}
+              />
+              {!editing && (
+                <TouchableOpacity
+                  style={[styles.scanBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setScannerOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="maximize" size={18} color="white" />
+                  <Text style={styles.scanBtnText}>{t("scanBarcode")}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {noBarcode && (
+            <Text
+              style={{
+                fontSize: 10,
+                color: colors.mutedForeground,
+                marginTop: 5,
+              }}
+            >
+              {t("autoIdHint")}
+            </Text>
+          )}
         </View>
 
         <Field
@@ -258,7 +358,10 @@ export default function ProductFormScreen() {
       <BarcodeScannerModal
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
-        onScanned={(code) => setForm((f) => ({ ...f, barcode: code }))}
+        onScanned={(code) => {
+          setForm((f) => ({ ...f, barcode: code }));
+          setNoBarcode(false);
+        }}
       />
     </View>
   );
@@ -348,6 +451,46 @@ function useStyles() {
       justifyContent: "center",
     },
 
+    labelRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 6,
+    },
+    fieldLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    noBarcodeBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+
+    autoBarcodeBox: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      gap: 8,
+    },
+    regenBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+    },
+
     grid2: { flexDirection: "row", gap: 12 },
     half: { flex: 1 },
 
@@ -362,13 +505,6 @@ function useStyles() {
     },
     saveBtnText: { color: "white", fontWeight: "700", fontSize: 15 },
 
-    fieldLabel: {
-      fontSize: 12,
-      fontWeight: "600",
-      marginBottom: 6,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-    },
     barcodeRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
     barcodeInput: {
       flex: 1,

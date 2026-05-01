@@ -21,7 +21,19 @@ export type HistoryEntry = {
   personName?: string;
   paid?: boolean;
   paidAt?: string;
+  sessionId?: string;
   date: string;
+};
+
+export type BillGroup = {
+  sessionId: string;
+  type: TransactionType;
+  personName?: string;
+  date: string;
+  totalAmount: number;
+  totalQty: number;
+  items: HistoryEntry[];
+  paid?: boolean;
 };
 
 export type ScanQueueItem = {

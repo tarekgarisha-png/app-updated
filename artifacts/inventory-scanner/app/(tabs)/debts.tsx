@@ -7,6 +7,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   UIManager,
   View,
@@ -32,8 +33,17 @@ export default function DebtsScreen() {
   const { history, markEntryPaid, markPersonPaid } = useInventory();
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState<string>("");
 
-  const debts = useMemo(() => summarizeDebts(history), [history]);
+  const allDebts = useMemo(() => summarizeDebts(history), [history]);
+
+  const debts = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return allDebts;
+    return allDebts.filter((d) =>
+      d.personName.toLowerCase().includes(q),
+    );
+  }, [allDebts, search]);
 
   const totals = useMemo(() => {
     let totalOwed = 0;
@@ -119,6 +129,34 @@ export default function DebtsScreen() {
           />
         </View>
       </View>
+
+      {allDebts.length > 0 && (
+        <View
+          style={[
+            styles.searchWrap,
+            { borderColor: colors.border },
+            rtl && styles.rowReverse,
+          ]}
+        >
+          <Feather name="search" size={16} color={colors.mutedForeground} />
+          <TextInput
+            style={[
+              styles.searchInput,
+              { color: colors.foreground },
+              rtl && { textAlign: "right" as const },
+            ]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={t("searchDebts")}
+            placeholderTextColor={colors.mutedForeground}
+          />
+          {!!search && (
+            <TouchableOpacity onPress={() => setSearch("")}>
+              <Feather name="x-circle" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {debts.length === 0 ? (
         <View style={styles.empty}>
@@ -398,5 +436,18 @@ function useStyles() {
       marginTop: 4,
     },
     payAllText: { color: "white", fontWeight: "700", fontSize: 13 },
+
+    searchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginHorizontal: 12,
+      marginTop: 12,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      backgroundColor: "transparent",
+    },
+    searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
   });
 }

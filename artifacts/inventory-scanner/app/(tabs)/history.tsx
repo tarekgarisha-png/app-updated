@@ -5,18 +5,28 @@ import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
+  LayoutAnimation,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
-import { buildHistoryCSV } from "@/lib/storage";
+import { buildHistoryCSV, groupHistoryIntoBills } from "@/lib/storage";
+import type { BillGroup } from "@/lib/types";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type Filter = "ALL" | "SALE" | "PURCHASE" | "CREDIT";
 
@@ -28,21 +38,27 @@ export default function HistoryScreen() {
 
   const [search, setSearch] = useState<string>("");
   const [filter, setFilter] = useState<Filter>("ALL");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const filtered = useMemo(() => {
+  const bills = useMemo(() => groupHistoryIntoBills(history), [history]);
+
+  const filteredBills = useMemo(() => {
     let list =
-      filter === "ALL" ? history : history.filter((h) => h.type === filter);
+      filter === "ALL" ? bills : bills.filter((b) => b.type === filter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
-        (h) =>
-          h.name.toLowerCase().includes(q) ||
-          h.barcode.includes(q) ||
-          (h.personName ?? "").toLowerCase().includes(q),
+        (b) =>
+          b.personName?.toLowerCase().includes(q) ||
+          b.items.some(
+            (h) =>
+              h.name.toLowerCase().includes(q) ||
+              h.barcode.includes(q),
+          ),
       );
     }
     return list;
-  }, [history, search, filter]);
+  }, [bills, search, filter]);
 
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -54,31 +70,24 @@ export default function HistoryScreen() {
     return `${date}  ${time}`;
   };
 
-  const totalSold = useMemo(
-    () =>
-      history
-        .filter((h) => h.type === "SALE")
-        .reduce((s, h) => s + (h.amount ?? 0), 0),
-    [history],
-  );
-  const totalPurchased = useMemo(
-    () =>
-      history
-        .filter((h) => h.type === "PURCHASE")
-        .reduce((s, h) => s + (h.amount ?? 0), 0),
-    [history],
-  );
-  const totalCredit = useMemo(
-    () =>
-      history
-        .filter((h) => h.type === "CREDIT" && !h.paid)
-        .reduce((s, h) => s + (h.amount ?? 0), 0),
-    [history],
-  );
+  const totals = useMemo(() => {
+    let sold = 0, purchased = 0, credit = 0;
+    history.forEach((h) => {
+      if (h.type === "SALE") sold += h.amount ?? 0;
+      else if (h.type === "PURCHASE") purchased += h.amount ?? 0;
+      else if (h.type === "CREDIT" && !h.paid) credit += h.amount ?? 0;
+    });
+    return { sold, purchased, credit };
+  }, [history]);
+
+  const toggleBill = (sessionId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((prev) => ({ ...prev, [sessionId]: !prev[sessionId] }));
+  };
 
   const exportCSV = async () => {
     try {
-      const data = filtered.length ? filtered : history;
+      const data = history;
       if (!data.length) {
         Alert.alert("", t("emptyExport"));
         return;
@@ -130,6 +139,167 @@ export default function HistoryScreen() {
   const headerTopPadding = Platform.OS === "web" ? 67 : insets.top + 8;
   const styles = useStyles();
 
+  const renderBill = ({ item }: { item: BillGroup }) => {
+    const isOpen = !!expanded[item.sessionId];
+    const isSale = item.type === "SALE";
+    const isCredit = item.type === "CREDIT";
+    const typeColor = isCredit
+      ? colors.warning
+      : isSale
+        ? colors.destructive
+        : colors.success;
+    const bgIcon = isCredit ? "#fef3c7" : isSale ? "#fee2e2" : "#dcfce7";
+    const sign = item.type === "PURCHASE" ? "+" : "−";
+    const isMulti = item.items.length > 1;
+
+    return (
+      <View style={[styles.billCard, { backgroundColor: colors.card }]}>
+        <TouchableOpacity
+          activeOpacity={isMulti ? 0.7 : 1}
+          onPress={() => isMulti && toggleBill(item.sessionId)}
+          style={[styles.billHeader, rtl && styles.rowReverse]}
+        >
+          <View style={[styles.typeIcon, { backgroundColor: bgIcon }]}>
+            <Feather
+              name={isCredit ? "user" : isSale ? "arrow-up" : "arrow-down"}
+              size={16}
+              color={typeColor}
+            />
+          </View>
+          <View style={styles.billInfo}>
+            {isCredit && item.personName ? (
+              <Text
+                style={[
+                  styles.billPerson,
+                  { color: colors.warning },
+                  rtl && styles.rtlText,
+                ]}
+                numberOfLines={1}
+              >
+                {item.personName}
+              </Text>
+            ) : null}
+            {isMulti ? (
+              <Text
+                style={[
+                  styles.billName,
+                  { color: colors.foreground },
+                  rtl && styles.rtlText,
+                ]}
+              >
+                {t("billItems", item.items.length)}
+              </Text>
+            ) : (
+              <Text
+                style={[
+                  styles.billName,
+                  { color: colors.foreground },
+                  rtl && styles.rtlText,
+                ]}
+                numberOfLines={1}
+              >
+                {item.items[0]?.name ?? ""}
+              </Text>
+            )}
+            <Text
+              style={[
+                styles.billDate,
+                { color: colors.mutedForeground },
+                rtl && styles.rtlText,
+              ]}
+            >
+              {fmtDate(item.date)}
+            </Text>
+          </View>
+          <View style={styles.billRight}>
+            <Text style={[styles.billQty, { color: typeColor }]}>
+              {sign}{item.totalQty}
+            </Text>
+            {item.totalAmount > 0 && (
+              <Text style={[styles.billAmount, { color: colors.foreground }]}>
+                {item.totalAmount.toFixed(2)}
+              </Text>
+            )}
+            {isCredit && (
+              <View
+                style={[
+                  styles.paidBadge,
+                  {
+                    backgroundColor: item.paid ? "#dcfce7" : "#fef3c7",
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: item.paid ? "#166534" : "#b45309",
+                    fontSize: 8,
+                    fontWeight: "800",
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  {item.paid ? t("paid") : t("unpaid")}
+                </Text>
+              </View>
+            )}
+            {isMulti && (
+              <Feather
+                name={isOpen ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={colors.mutedForeground}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {isOpen && (
+          <View
+            style={[
+              styles.billItems,
+              { borderTopColor: colors.border },
+            ]}
+          >
+            {item.items.map((h) => (
+              <View
+                key={h.id}
+                style={[styles.lineRow, rtl && styles.rowReverse]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.lineName,
+                      { color: colors.foreground },
+                      rtl && styles.rtlText,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {h.name}
+                  </Text>
+                  {(h.unitPrice ?? 0) > 0 && (
+                    <Text
+                      style={[
+                        styles.lineMeta,
+                        { color: colors.mutedForeground },
+                        rtl && styles.rtlText,
+                      ]}
+                    >
+                      {h.qty} × {(h.unitPrice ?? 0).toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.lineAmount, { color: typeColor }]}>
+                  {sign}{h.qty}
+                  {(h.amount ?? 0) > 0
+                    ? `  ${(h.amount ?? 0).toFixed(2)}`
+                    : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View
@@ -154,27 +324,24 @@ export default function HistoryScreen() {
 
         <View style={[styles.summary, rtl && styles.rowReverse]}>
           <SumItem
-            num={totalSold}
+            num={totals.sold.toFixed(0)}
             label={t("sold")}
             color={colors.destructive}
             mutedColor={colors.mutedForeground}
-            isMoney
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SumItem
-            num={totalPurchased}
+            num={totals.purchased.toFixed(0)}
             label={t("purchased")}
             color={colors.success}
             mutedColor={colors.mutedForeground}
-            isMoney
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SumItem
-            num={totalCredit}
+            num={totals.credit.toFixed(0)}
             label={t("credit")}
             color={colors.warning}
             mutedColor={colors.mutedForeground}
-            isMoney
           />
           <TouchableOpacity
             style={[styles.csvBtn, { backgroundColor: colors.primary }]}
@@ -253,7 +420,7 @@ export default function HistoryScreen() {
         )}
       </View>
 
-      {filtered.length === 0 ? (
+      {filteredBills.length === 0 ? (
         <View style={styles.empty}>
           <Feather name="clock" size={48} color={colors.border} />
           <Text
@@ -268,120 +435,13 @@ export default function HistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={(i) => i.id}
+          data={filteredBills}
+          keyExtractor={(b) => b.sessionId}
           contentContainerStyle={{
             padding: 12,
             paddingBottom: insets.bottom + 90,
           }}
-          renderItem={({ item }) => {
-            const isSale = item.type === "SALE";
-            const isCredit = item.type === "CREDIT";
-            const typeColor = isCredit
-              ? colors.warning
-              : isSale
-                ? colors.destructive
-                : colors.success;
-            const bgIcon = isCredit
-              ? "#fef3c7"
-              : isSale
-                ? "#fee2e2"
-                : "#dcfce7";
-            const sign = item.type === "PURCHASE" ? "+" : "−";
-            return (
-              <View
-                style={[
-                  styles.row,
-                  { backgroundColor: colors.card },
-                  rtl && styles.rowReverse,
-                ]}
-              >
-                <View style={[styles.typeIcon, { backgroundColor: bgIcon }]}>
-                  <Feather
-                    name={
-                      isCredit
-                        ? "user"
-                        : isSale
-                          ? "arrow-up"
-                          : "arrow-down"
-                    }
-                    size={16}
-                    color={typeColor}
-                  />
-                </View>
-                <View style={styles.rowInfo}>
-                  <Text
-                    style={[
-                      styles.rowName,
-                      { color: colors.foreground },
-                      rtl && styles.rtlText,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                  {isCredit && item.personName ? (
-                    <Text
-                      style={[
-                        styles.rowPerson,
-                        { color: colors.warning },
-                        rtl && styles.rtlText,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.personName}
-                    </Text>
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.rowDate,
-                      { color: colors.mutedForeground },
-                      rtl && styles.rtlText,
-                    ]}
-                  >
-                    {fmtDate(item.date)}
-                  </Text>
-                </View>
-                <View style={styles.rowRight}>
-                  <Text style={[styles.rowQty, { color: typeColor }]}>
-                    {sign}
-                    {item.qty}
-                  </Text>
-                  {(item.amount ?? 0) > 0 && (
-                    <Text
-                      style={[
-                        styles.rowAmount,
-                        { color: colors.foreground },
-                      ]}
-                    >
-                      {(item.amount ?? 0).toFixed(2)}
-                    </Text>
-                  )}
-                  {isCredit && (
-                    <View
-                      style={[
-                        styles.paidBadge,
-                        {
-                          backgroundColor: item.paid ? "#dcfce7" : "#fef3c7",
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          color: item.paid ? "#166534" : "#b45309",
-                          fontSize: 8,
-                          fontWeight: "800",
-                          letterSpacing: 0.4,
-                        }}
-                      >
-                        {item.paid ? t("paid") : t("unpaid")}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderBill}
         />
       )}
 
@@ -418,18 +478,15 @@ function SumItem({
   label,
   color,
   mutedColor,
-  isMoney,
 }: {
-  num: number;
+  num: string;
   label: string;
   color: string;
   mutedColor: string;
-  isMoney?: boolean;
 }) {
-  const display = isMoney ? num.toFixed(0) : String(num);
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
-      <Text style={{ fontSize: 16, fontWeight: "800", color }}>{display}</Text>
+      <Text style={{ fontSize: 16, fontWeight: "800", color }}>{num}</Text>
       <Text
         style={{
           fontSize: 9,
@@ -510,18 +567,21 @@ function useStyles() {
     },
     emptyText: { fontSize: 15 },
 
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
+    billCard: {
       borderRadius: 12,
-      padding: 12,
       marginBottom: 8,
-      gap: 10,
+      overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: 0.04,
       shadowOffset: { width: 0, height: 1 },
       shadowRadius: 3,
       elevation: 1,
+    },
+    billHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 12,
+      gap: 10,
     },
     typeIcon: {
       width: 36,
@@ -530,19 +590,35 @@ function useStyles() {
       justifyContent: "center",
       alignItems: "center",
     },
-    rowInfo: { flex: 1 },
-    rowName: { fontWeight: "700", fontSize: 13 },
-    rowPerson: { fontSize: 11, fontWeight: "700", marginTop: 1 },
-    rowDate: { fontSize: 10, marginTop: 1 },
-    rowRight: { alignItems: "flex-end", gap: 2 },
-    rowQty: { fontSize: 16, fontWeight: "800" },
-    rowAmount: { fontSize: 12, fontWeight: "700" },
+    billInfo: { flex: 1 },
+    billPerson: { fontSize: 11, fontWeight: "700", marginBottom: 1 },
+    billName: { fontWeight: "700", fontSize: 13 },
+    billDate: { fontSize: 10, marginTop: 1 },
+    billRight: { alignItems: "flex-end", gap: 2 },
+    billQty: { fontSize: 16, fontWeight: "800" },
+    billAmount: { fontSize: 12, fontWeight: "700" },
     paidBadge: {
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,
       marginTop: 2,
     },
+
+    billItems: {
+      borderTopWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      gap: 8,
+    },
+    lineRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 2,
+    },
+    lineName: { fontSize: 12, fontWeight: "600" },
+    lineMeta: { fontSize: 10, marginTop: 1 },
+    lineAmount: { fontSize: 12, fontWeight: "700" },
 
     clearBtn: {
       flexDirection: "row",

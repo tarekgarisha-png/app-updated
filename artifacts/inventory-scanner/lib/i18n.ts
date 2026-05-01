@@ -153,6 +153,21 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     totalLabel: "الإجمالي",
     queueTotal: "إجمالي السلة",
     debtorBadge: (n: number) => `${n} مدين`,
+
+    noBarcode: "بدون باركود",
+    generateId: "توليد رقم تلقائي",
+    autoIdHint: "سيُستخدم رقم تعريف تلقائي كباركود",
+    addByName: "إضافة بحثًا عن الاسم",
+    searchProducts: "ابحث في المنتجات...",
+
+    bill: "فاتورة",
+    billItems: (n: number) => `${n} صنف`,
+    billTotal: "إجمالي الفاتورة",
+    groupedBills: "فواتير مجمّعة",
+    singleItem: "صنف مفرد",
+
+    searchDebts: "ابحث عن شخص...",
+    noDebtsSearch: "لا توجد نتائج",
   },
 
   en: {
@@ -305,6 +320,21 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     totalLabel: "Total",
     queueTotal: "Cart Total",
     debtorBadge: (n: number) => `${n} owe`,
+
+    noBarcode: "No Barcode",
+    generateId: "Generate Auto ID",
+    autoIdHint: "An auto-generated ID will be used as the barcode",
+    addByName: "Add by Name",
+    searchProducts: "Search products...",
+
+    bill: "Bill",
+    billItems: (n: number) => `${n} item(s)`,
+    billTotal: "Bill Total",
+    groupedBills: "Grouped Bills",
+    singleItem: "Single Item",
+
+    searchDebts: "Search person...",
+    noDebtsSearch: "No results",
   },
 };
 

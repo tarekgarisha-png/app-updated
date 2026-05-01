@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type {
+  BillGroup,
   DebtSummary,
   HistoryEntry,
   Product,
@@ -68,6 +69,7 @@ export async function commitScanQueue(
 ): Promise<void> {
   const products = await getAllProducts();
   const now = new Date().toISOString();
+  const batchSessionId = genId();
   const history = await getHistory(10000);
 
   for (const item of queue) {
@@ -82,6 +84,7 @@ export async function commitScanQueue(
       if (!unitPrice) unitPrice = products[idx]!.price;
     }
     const amount = unitPrice * item.qty;
+    const sessionId = batchSessionId;
     const entry: HistoryEntry = {
       id: genId(),
       barcode: item.barcode,
@@ -90,6 +93,7 @@ export async function commitScanQueue(
       qty: item.qty,
       unitPrice,
       amount,
+      sessionId,
       date: now,
     };
     if (mode === "CREDIT") {
@@ -161,6 +165,43 @@ export async function deleteCreditEntry(entryId: string): Promise<void> {
   const history = await getHistory(10000);
   const next = history.filter((h) => h.id !== entryId);
   await writeHistory(next);
+}
+
+export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {
+  const sessionMap = new Map<string, BillGroup>();
+  const singleKey = (h: HistoryEntry) => `solo:${h.id}`;
+
+  for (const h of history) {
+    const key = h.sessionId ?? singleKey(h);
+    const existing = sessionMap.get(key);
+    if (existing) {
+      existing.totalAmount += h.amount ?? 0;
+      existing.totalQty += h.qty;
+      existing.items.push(h);
+      if (h.paid === false) existing.paid = false;
+    } else {
+      sessionMap.set(key, {
+        sessionId: key,
+        type: h.type,
+        personName: h.personName,
+        date: h.date,
+        totalAmount: h.amount ?? 0,
+        totalQty: h.qty,
+        items: [h],
+        paid: h.type === "CREDIT" ? (h.paid ?? false) : undefined,
+      });
+    }
+  }
+
+  return Array.from(sessionMap.values()).sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+}
+
+export function generateAutoBarcode(): string {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `#${ts}${rand}`;
 }
 
 export function summarizeDebts(history: HistoryEntry[]): DebtSummary[] {
