@@ -168,6 +168,11 @@ const strings: Record<Lang, Record<string, StringValue>> = {
 
     searchDebts: "ابحث عن شخص...",
     noDebtsSearch: "لا توجد نتائج",
+
+    addCustomItem: "إضافة صنف",
+    addToBill: "إضافة للفاتورة",
+    customNamePlaceholder: "مثال: خبز، سكر...",
+    qty: "الكمية",
   },
 
   en: {
@@ -335,6 +340,11 @@ const strings: Record<Lang, Record<string, StringValue>> = {
 
     searchDebts: "Search person...",
     noDebtsSearch: "No results",
+
+    addCustomItem: "Add Item",
+    addToBill: "Add to Bill",
+    customNamePlaceholder: "e.g. Bread, Sugar...",
+    qty: "Qty",
   },
 };
 

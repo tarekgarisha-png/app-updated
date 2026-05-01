@@ -40,6 +40,10 @@ export default function ScannerScreen() {
   const [personName, setPersonName] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [pickerSearch, setPickerSearch] = useState<string>("");
+  const [customOpen, setCustomOpen] = useState<boolean>(false);
+  const [customName, setCustomName] = useState<string>("");
+  const [customPrice, setCustomPrice] = useState<string>("");
+  const [customQty, setCustomQty] = useState<string>("1");
 
   const isWeb = Platform.OS === "web";
   const canUseCamera = !isWeb && permission?.granted;
@@ -185,6 +189,32 @@ export default function ScannerScreen() {
     } catch {
       Alert.alert("Error", t("dbError"));
     }
+  };
+
+  const openCustom = () => {
+    setCustomName("");
+    setCustomPrice("");
+    setCustomQty("1");
+    setCustomOpen(true);
+  };
+
+  const submitCustomItem = () => {
+    const name = customName.trim();
+    if (!name) {
+      Alert.alert("", t("nameRequired"));
+      return;
+    }
+    const price = parseFloat(customPrice) || 0;
+    const qty = Math.max(1, parseInt(customQty, 10) || 1);
+    const tempBarcode = `#CUSTOM-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 6)}`;
+    setScanQueue((prev) => [
+      ...prev,
+      { barcode: tempBarcode, name, qty, unit: "pcs", price },
+    ]);
+    beepAndShake().catch(() => {});
+    setCustomOpen(false);
   };
 
   const confirmTransaction = () => {
@@ -393,24 +423,35 @@ export default function ScannerScreen() {
               <Text style={styles.qtyHint}> {t("items", totalItems)}</Text>
             )}
           </Text>
-          {scanQueue.length > 0 && (
+          <View style={[styles.listHeaderRight, rtl && styles.rowReverse]}>
             <TouchableOpacity
-              onPress={() =>
-                Alert.alert(t("clearAllTitle"), t("clearAllMsg"), [
-                  { text: t("cancel"), style: "cancel" },
-                  {
-                    text: t("clearAll"),
-                    style: "destructive",
-                    onPress: () => setScanQueue([]),
-                  },
-                ])
-              }
+              onPress={openCustom}
+              style={[styles.addCustomBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "44" }]}
             >
-              <Text style={[styles.clearAllBtn, { color: colors.destructive }]}>
-                {t("clearAll")}
+              <Feather name="plus" size={13} color={colors.primary} />
+              <Text style={[styles.addCustomText, { color: colors.primary }]}>
+                {t("addCustomItem")}
               </Text>
             </TouchableOpacity>
-          )}
+            {scanQueue.length > 0 && (
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert(t("clearAllTitle"), t("clearAllMsg"), [
+                    { text: t("cancel"), style: "cancel" },
+                    {
+                      text: t("clearAll"),
+                      style: "destructive",
+                      onPress: () => setScanQueue([]),
+                    },
+                  ])
+                }
+              >
+                <Text style={[styles.clearAllBtn, { color: colors.destructive }]}>
+                  {t("clearAll")}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {scanQueue.length === 0 ? (
@@ -595,6 +636,133 @@ export default function ScannerScreen() {
               >
                 <Text style={{ color: "white", fontWeight: "700" }}>
                   {t("add")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom item modal — add directly to bill without barcode */}
+      <Modal
+        visible={customOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCustomOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <View style={[styles.customHeader, rtl && styles.rowReverse]}>
+              <View style={[styles.customIconBox, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="tag" size={18} color={colors.primary} />
+              </View>
+              <Text style={[styles.modalTitle, { color: colors.foreground, flex: 1 }]}>
+                {t("addCustomItem")}
+              </Text>
+              <TouchableOpacity onPress={() => setCustomOpen(false)}>
+                <Feather name="x" size={20} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.customFieldLabel, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
+              {t("productName")} *
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                { borderColor: colors.border, color: colors.foreground },
+                rtl && { textAlign: "right" as const },
+              ]}
+              value={customName}
+              onChangeText={setCustomName}
+              placeholder={t("customNamePlaceholder")}
+              placeholderTextColor={colors.mutedForeground}
+              autoFocus
+              returnKeyType="next"
+            />
+
+            <View style={styles.customRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.customFieldLabel, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
+                  {t("price")}
+                </Text>
+                <TextInput
+                  style={[
+                    styles.modalInput,
+                    { borderColor: colors.border, color: colors.foreground },
+                    rtl && { textAlign: "right" as const },
+                  ]}
+                  value={customPrice}
+                  onChangeText={setCustomPrice}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="decimal-pad"
+                  returnKeyType="next"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.customFieldLabel, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
+                  {t("qty")}
+                </Text>
+                <View style={[styles.qtyEditorRow, rtl && styles.rowReverse]}>
+                  <TouchableOpacity
+                    style={[styles.qtyEdBtn, { backgroundColor: colors.secondary }]}
+                    onPress={() =>
+                      setCustomQty((v) => String(Math.max(1, (parseInt(v) || 1) - 1)))
+                    }
+                  >
+                    <Text style={[styles.qtyBtnText, { color: colors.foreground }]}>−</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[
+                      styles.qtyEdInput,
+                      { borderColor: colors.border, color: colors.foreground },
+                    ]}
+                    value={customQty}
+                    onChangeText={(v) =>
+                      setCustomQty(v.replace(/[^0-9]/g, "") || "1")
+                    }
+                    keyboardType="number-pad"
+                    textAlign="center"
+                  />
+                  <TouchableOpacity
+                    style={[styles.qtyEdBtn, { backgroundColor: colors.secondary }]}
+                    onPress={() =>
+                      setCustomQty((v) => String((parseInt(v) || 1) + 1))
+                    }
+                  >
+                    <Text style={[styles.qtyBtnText, { color: colors.foreground }]}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {customName.trim() && parseFloat(customPrice) > 0 && (
+              <View style={[styles.customTotal, { backgroundColor: colors.secondary }]}>
+                <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>
+                  {t("totalLabel")}
+                </Text>
+                <Text style={{ color: colors.foreground, fontWeight: "800", fontSize: 16 }}>
+                  {(parseFloat(customPrice) * (parseInt(customQty) || 1)).toFixed(2)}
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.modalActions, rtl && styles.rowReverse]}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.secondary }]}
+                onPress={() => setCustomOpen(false)}
+              >
+                <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+                  {t("cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: modeColor, flex: 1, alignItems: "center" }]}
+                onPress={submitCustomItem}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  {t("addToBill")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1098,6 +1266,79 @@ function useStyles() {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,
+    },
+
+    listHeaderRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    addCustomBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+    },
+    addCustomText: { fontSize: 11, fontWeight: "700" },
+
+    customHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 4,
+    },
+    customIconBox: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    customFieldLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      marginBottom: 5,
+      marginTop: 10,
+    },
+    customRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 2,
+    },
+    qtyEditorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    qtyEdBtn: {
+      width: 34,
+      height: 40,
+      borderRadius: 8,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    qtyEdInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 8,
+      height: 40,
+      fontSize: 16,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    customTotal: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      marginTop: 12,
     },
 
     pickerBackdrop: {
