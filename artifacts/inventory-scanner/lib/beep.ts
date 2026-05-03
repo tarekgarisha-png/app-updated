@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { Platform, Vibration } from "react-native";
+import beepAsset from "../assets/scan-beep.mp3";
 
 let audioCtx: AudioContext | null = null;
 
@@ -52,15 +53,15 @@ async function getNativeBeepSound(): Promise<any | null> {
       allowsRecordingIOS: false,
     });
     if (!soundPath) {
-      const source = require("../assets/scan-beep.mp3");
-      const uri = typeof source === "string" ? source : source?.uri;
+      const uri = typeof beepAsset === "string" ? beepAsset : beepAsset?.uri;
       if (!uri) return null;
-      soundPath = (FileSystem.cacheDirectory ?? "") + "scan-beep.mp3";
-      if (uri !== soundPath) {
-        await FileSystem.copyAsync({ from: uri, to: soundPath });
-      }
+      soundPath = `${FileSystem.cacheDirectory ?? ""}scan-beep.mp3`;
+      await FileSystem.copyAsync({ from: uri, to: soundPath });
     }
-    const { sound } = await Audio.Sound.createAsync({ uri: soundPath });
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: soundPath },
+      { shouldPlay: false },
+    );
     soundCached = sound;
     return sound;
   } catch {
