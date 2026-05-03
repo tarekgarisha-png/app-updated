@@ -149,7 +149,9 @@ export default function HistoryScreen() {
         const a = document.createElement("a");
         a.href = url;
         a.download = `history_${Date.now()}.csv`;
+        document.body.appendChild(a);
         a.click();
+        a.remove();
         URL.revokeObjectURL(url);
         return;
       }
@@ -158,6 +160,8 @@ export default function HistoryScreen() {
       await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: t("exportCSV") });
+      } else {
+        Alert.alert("", t("noSharing"));
       }
     } catch {
       Alert.alert(t("exportFailed"), "");
