@@ -81,6 +81,9 @@ export function ShiftLockScreen() {
         <Text style={[styles.subTitle, { color: colors.mutedForeground }]}>
           {t("selectShift")}
         </Text>
+        <Text style={[styles.credit, { color: colors.mutedForeground }]}>
+          developed by Amr Mo
+        </Text>
       </View>
 
       <View style={[styles.shiftRow, rtl && styles.rowRev]}>
@@ -220,6 +223,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   subTitle: { fontSize: 15, fontWeight: "500" },
+  credit: { marginTop: 8, fontSize: 12, fontWeight: "500" },
 
   rowRev: { flexDirection: "row-reverse" },
 
