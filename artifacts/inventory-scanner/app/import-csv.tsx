@@ -8,6 +8,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  PermissionsAndroid,
   ScrollView,
   StyleSheet,
   Text,
@@ -87,6 +88,15 @@ export default function ImportCSVScreen() {
 
   const handlePickFile = async () => {
     try {
+      if (Platform.OS === "android" && Platform.Version < 29) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert("", t("cameraDenied"));
+          return;
+        }
+      }
       const text = await pickAndReadCSV();
       if (!text) return;
       parseAndPreview(text);
