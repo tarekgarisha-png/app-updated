@@ -4,7 +4,7 @@ type StringValue = string | ((...args: any[]) => string);
 
 const strings: Record<Lang, Record<string, StringValue>> = {
   ar: {
-    appName: "كيو سودا ماركت",
+    appName: "قصودة ماركت",
     loading: "جارٍ التحميل...",
     dbError: "خطأ في قاعدة البيانات",
 
@@ -37,7 +37,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     lowStock: (n: number) => `${n} منخفض المخزون`,
     cameraRequest: "جارٍ طلب إذن الكاميرا...",
     cameraDenied: "تم رفض إذن الكاميرا",
-    cameraHint: "الإعدادات ← التطبيقات ← كيو سودا ماركت ← الأذونات",
+    cameraHint: "الإعدادات ← التطبيقات ← قصودة ماركت ← الأذونات",
     grantPermission: "منح الإذن",
     items: (n: number) => `(${n} وحدة)`,
     manualEntry: "إدخال يدوي",
@@ -192,11 +192,11 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     shareGuideIOS1: "افتح واتساب أو Gmail أو تطبيق الملفات",
     shareGuideIOS2: "اضغط على ملف CSV أو المرفق",
     shareGuideIOS3: "اضغط على زر المشاركة (□↑) ثم مرر للأسفل",
-    shareGuideIOS4: "اختر «فتح في كيو سودا ماركت» أو «نسخ إلى...»",
+    shareGuideIOS4: "اختر «فتح في قصودة ماركت» أو «نسخ إلى...»",
     shareGuideAndroid1: "افتح واتساب أو Gmail أو Google Drive",
     shareGuideAndroid2: "اضغط مطولاً على ملف CSV",
     shareGuideAndroid3: "اضغط «مشاركة» أو «فتح باستخدام»",
-    shareGuideAndroid4: "اختر «كيو سودا ماركت» من القائمة",
+    shareGuideAndroid4: "اختر «قصودة ماركت» من القائمة",
     personName: "اسم العميل",
     enterPersonName: "أدخل اسم العميل",
     personRequired: "اسم العميل مطلوب",
