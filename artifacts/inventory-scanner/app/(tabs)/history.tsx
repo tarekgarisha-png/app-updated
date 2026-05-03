@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { Linking } from "react-native";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -40,6 +41,22 @@ function buildBillHTML(bill: BillGroup): string {
     )
     .join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#111}h1{text-align:center;font-size:22px;margin:0 0 4px}.subtitle{text-align:center;color:#666;font-size:13px;margin-bottom:16px}.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;margin-bottom:16px}.sale{background:#fee2e2;color:#b91c1c}.purchase{background:#dcfce7;color:#15803d}.credit{background:#fef3c7;color:#b45309}.return{background:#e0f2fe;color:#0369a1}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#f3f4f6;text-align:left;padding:8px 10px;font-size:12px;color:#555}td{padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:13px}.total-row td{font-weight:700;font-size:14px;border-top:2px solid #111;border-bottom:none;padding-top:12px}.person{font-size:14px;font-weight:700;color:#d97706;margin-bottom:8px}.footer{text-align:center;color:#999;font-size:11px;margin-top:24px}</style></head><body><h1>Qasoda Market</h1><p class="subtitle">${dateStr}</p><div style="text-align:center"><span class="badge ${bill.type.toLowerCase()}">${bill.type}</span></div>${bill.personName ? `<p class="person">Customer: ${bill.personName}</p>` : ""}<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}<tr class="total-row"><td colspan="3">Total</td><td style="text-align:right">${bill.totalAmount.toFixed(2)}</td></tr></tbody></table><p class="footer">Printed from Qasoda Market</p></body></html>`;
+}
+
+function buildBillText(bill: BillGroup): string {
+  const lines = [
+    "Qasoda Market",
+    new Date(bill.date).toLocaleString(),
+    bill.personName ? `Customer: ${bill.personName}` : "",
+    "",
+    ...bill.items.map(
+      (h) =>
+        `${h.name} x${h.qty}${(h.amount ?? 0) > 0 ? ` = ${(h.amount ?? 0).toFixed(2)}` : ""}`,
+    ),
+    "",
+    `Total: ${bill.totalAmount.toFixed(2)}`,
+  ];
+  return lines.filter(Boolean).join("\n");
 }
 
 export default function HistoryScreen() {
@@ -101,6 +118,21 @@ export default function HistoryScreen() {
       Alert.alert("", t("printError"));
     } finally {
       setPrinting(null);
+    }
+  };
+  const handleShareWhatsApp = async (bill: BillGroup) => {
+    try {
+      const text = buildBillText(bill);
+      const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
+      const canOpen = await Linking.canOpenURL("whatsapp://send");
+      if (canOpen) {
+        await Linking.openURL(url);
+        return;
+      }
+      const webUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      await Linking.openURL(webUrl);
+    } catch {
+      Alert.alert("", t("shareBillFailed"));
     }
   };
   const exportCSV = async () => {
@@ -186,6 +218,7 @@ export default function HistoryScreen() {
         </TouchableOpacity>
         <View style={[styles.actionRow, { borderTopColor: colors.border }, rtl && styles.rowReverse]}>
           {canReturn && !allReturned && <TouchableOpacity style={styles.actionBtn} onPress={() => handleReturnBill(item)}><Feather name="rotate-ccw" size={12} color="#0ea5e9" /><Text style={[styles.actionBtnText, { color: "#0369a1" }]}>{isMulti ? t("returnBill") : t("returnItem")}</Text></TouchableOpacity>}
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#ecfeff" }]} onPress={() => handleShareWhatsApp(item)}><Feather name="message-circle" size={12} color="#16a34a" /><Text style={[styles.actionBtnText, { color: "#16a34a" }]}>{t("shareWhatsApp")}</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f3e8ff" }]} onPress={() => handlePrintBill(item)} disabled={isPrinting}><Feather name="printer" size={12} color="#7c3aed" /><Text style={[styles.actionBtnText, { color: "#7c3aed" }]}>{isPrinting ? "..." : t("printBill")}</Text></TouchableOpacity>
         </View>
         {isOpen && <View style={[styles.billItems, { borderTopColor: colors.border }]}>{item.items.map((h) => {
