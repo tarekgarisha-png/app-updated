@@ -100,27 +100,21 @@ export default function HistoryScreen() {
       setPrinting(bill.sessionId);
       const html = buildBillHTML(bill);
       const filename = `bill_${bill.sessionId}_${Date.now()}.pdf`;
+      const printResult = await Print.printToFileAsync({ html });
       if (Platform.OS === "web") {
-        const { uri } = await Print.printToFileAsync({ html });
         const a = document.createElement("a");
-        a.href = uri;
+        a.href = printResult.uri;
         a.download = filename;
+        document.body.appendChild(a);
         a.click();
+        a.remove();
         return;
       }
-      const { uri } = await Print.printToFileAsync({ html });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: "application/pdf",
-          dialogTitle: t("printBill"),
-          UTI: "com.adobe.pdf",
-        });
-      } else {
-        await FileSystem.copyAsync({
-          from: uri,
-          to: `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""}${filename}`,
-        });
-      }
+      await Sharing.shareAsync(printResult.uri, {
+        mimeType: "application/pdf",
+        dialogTitle: t("printBill"),
+        UTI: "com.adobe.pdf",
+      });
     } catch {
       Alert.alert("", t("printError"));
     } finally {

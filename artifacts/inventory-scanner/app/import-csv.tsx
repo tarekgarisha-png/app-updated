@@ -40,7 +40,9 @@ export default function ImportCSVScreen() {
   const handlePickFile = async () => {
     try {
       const text = await pickAndReadCSV();
-      if (!text) return;
+      if (!text) {
+        return;
+      }
 
       const parsed = parseProductsCSV(text);
       if (parsed.headerMissing) {
@@ -54,8 +56,8 @@ export default function ImportCSVScreen() {
       setRows(parsed.rows);
       setErrors(parsed.errors);
       setStep("preview");
-    } catch {
-      Alert.alert("", t("importFailed"));
+    } catch (err) {
+      Alert.alert("", err instanceof Error ? err.message : t("importFailed"));
     }
   };
 
@@ -122,8 +124,8 @@ export default function ImportCSVScreen() {
       } else {
         Alert.alert("", t("noSharing"));
       }
-    } catch {
-      Alert.alert("", t("importFailed"));
+    } catch (err) {
+      Alert.alert("", err instanceof Error ? err.message : t("importFailed"));
     }
   };
 
