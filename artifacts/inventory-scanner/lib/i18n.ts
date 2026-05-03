@@ -21,6 +21,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     confirmSale: "تأكيد البيع",
     confirmPurchase: "تأكيد الشراء",
     confirmCredit: "تأكيد الدين",
+    credit: "دين",
     scanPrompt: "وجّه الكاميرا نحو الباركود",
     scanBarcode: "مسح الباركود",
     unknownBarcode: "باركود غير معروف",
