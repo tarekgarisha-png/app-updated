@@ -21,6 +21,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     confirmSale: "تأكيد البيع",
     confirmPurchase: "تأكيد الشراء",
     scanPrompt: "وجّه الكاميرا نحو الباركود",
+    scanBarcode: "مسح الباركود",
     unknownBarcode: "باركود غير معروف",
     unknownMsg: "هذا المنتج غير مسجل.",
     ignore: "تجاهل",
@@ -117,9 +118,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importPickFile: "اختر ملف",
     importDownloadSample: "تنزيل ملف عينة",
     importInstructions:
-      "ملف CSV يحتوي على هذه الأعمدة: Barcode (مطلوب)، Name (مطلوب)، Arabic Name، Stock، Min Stock، Unit، Price.",
-    appName: "كيو سودا ماركت",
-    cameraHint: "الإعدادات ← التطبيقات ← كيو سودا ماركت ← الأذونات",
+      "يجب أن يحتوي ملف CSV على الأعمدة التالية: Barcode (مطلوب)، Name (مطلوب)، Arabic Name، Stock، Min Stock، Unit، Price.",
   },
   en: {
     appName: "Qasoda Market",

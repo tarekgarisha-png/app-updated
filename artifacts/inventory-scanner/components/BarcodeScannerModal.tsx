@@ -45,9 +45,13 @@ export function BarcodeScannerModal({ visible, onClose, onScanned }: Props) {
       return (
         <View style={styles.center}>
           <Feather name="camera-off" size={48} color="#94a3b8" />
-          <Text style={styles.bigText}>Camera scanning is mobile-only</Text>
-          <Text style={styles.smallText}>
-            Open this app in Expo Go on your phone to scan barcodes.
+          <Text style={[styles.bigText, rtl && styles.rtlText]}>
+            {rtl ? "المسح بالكاميرا يعمل على الهاتف فقط" : "Camera scanning is mobile-only"}
+          </Text>
+          <Text style={[styles.smallText, rtl && styles.rtlText]}>
+            {rtl
+              ? "افتح التطبيق عبر Expo Go على هاتفك لمسح الباركود."
+              : "Open this app in Expo Go on your phone to scan barcodes."}
           </Text>
         </View>
       );
@@ -141,6 +145,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   smallText: { color: "#94a3b8", fontSize: 13, textAlign: "center" },
+  rtlText: { textAlign: "right", writingDirection: "rtl" },
   permButton: {
     backgroundColor: "white",
     paddingHorizontal: 20,
