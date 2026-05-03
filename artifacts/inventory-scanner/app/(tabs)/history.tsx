@@ -3,6 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { Linking } from "react-native";
+import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -233,8 +234,8 @@ export default function HistoryScreen() {
         <View style={[styles.actionRow, { borderTopColor: colors.border }, rtl && styles.rowReverse]}>
           {canReturn && !allReturned && <TouchableOpacity style={styles.actionBtn} onPress={() => handleReturnBill(item)}><Feather name="rotate-ccw" size={12} color="#0ea5e9" /><Text style={[styles.actionBtnText, { color: "#0369a1" }]}>{isMulti ? t("returnBill") : t("returnItem")}</Text></TouchableOpacity>}
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#ecfeff" }]} onPress={() => handleShareWhatsApp(item)}><Feather name="message-circle" size={12} color="#16a34a" /><Text style={[styles.actionBtnText, { color: "#16a34a" }]}>{t("shareWhatsApp")}</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f3e8ff" }]} onPress={exportCSV} disabled={isPrinting}><Feather name="download" size={12} color="#7c3aed" /><Text style={[styles.actionBtnText, { color: "#7c3aed" }]}>{t("exportCSV")}</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f3e8ff" }]} onPress={() => handlePrintBill(item)} disabled={isPrinting}><Feather name="printer" size={12} color="#7c3aed" /><Text style={[styles.actionBtnText, { color: "#7c3aed" }]}>{isPrinting ? "..." : t("printBill")}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#e0f2fe" }]} onPress={() => router.push("/settings")}><Feather name="settings" size={12} color="#0369a1" /><Text style={[styles.actionBtnText, { color: "#0369a1" }]}>{t("printerSetup")}</Text></TouchableOpacity>
         </View>
         {isOpen && <View style={[styles.billItems, { borderTopColor: colors.border }]}>{item.items.map((h) => {
           const canReturnLine = !h.returned && (h.type === "SALE" || h.type === "CREDIT");

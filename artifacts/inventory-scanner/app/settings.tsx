@@ -392,6 +392,17 @@ export default function SettingsScreen() {
         </Text>
         <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ActionRow
+            icon="printer"
+            iconColor="#7c3aed"
+            iconBg="#f3e8ff"
+            label={t("printerSetupTitle")}
+            desc={t("printerSetupHint")}
+            rtl={rtl}
+            colors={colors}
+            onPress={() => Alert.alert(t("printerSetupTitle"), t("printerSetupDesc"))}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ActionRow
             icon="upload"
             iconColor={colors.primary}
             iconBg="#eff6ff"
