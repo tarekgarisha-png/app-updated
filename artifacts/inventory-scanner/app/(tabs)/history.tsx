@@ -120,7 +120,8 @@ export default function HistoryScreen() {
         URL.revokeObjectURL(url);
         return;
       }
-      const path = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ""}history_${Date.now()}.csv`;
+      const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? "";
+      const path = `${dir}history_${Date.now()}.csv`;
       await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: t("exportCSV") });
@@ -195,4 +196,82 @@ export default function HistoryScreen() {
     );
   };
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>...
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: headerTopPadding, backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.foreground }, rtl && styles.rtlText]}>{t("historyTitle")}</Text>
+        <View style={[styles.summary, rtl && styles.rowReverse]}>
+          <SumItem num={totals.sold.toFixed(0)} label={t("sold")} color={colors.destructive} mutedColor={colors.mutedForeground} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SumItem num={totals.purchased.toFixed(0)} label={t("purchased")} color={colors.success} mutedColor={colors.mutedForeground} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SumItem num={totals.credit.toFixed(0)} label={t("credit")} color={colors.warning} mutedColor={colors.mutedForeground} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SumItem num={totals.returned.toFixed(0)} label={t("returnType")} color="#0ea5e9" mutedColor={colors.mutedForeground} />
+          <TouchableOpacity style={[styles.csvBtn, { backgroundColor: colors.primary }]} onPress={exportCSV}><Feather name="download" size={14} color="white" /><Text style={styles.csvText}>CSV</Text></TouchableOpacity>
+        </View>
+      </View>
+      <View style={[styles.tabs, { backgroundColor: colors.card, borderColor: colors.border }, rtl && styles.rowReverse]}>{(["ALL", "SALE", "PURCHASE", "CREDIT", "RETURN"] as Filter[]).map((key) => {
+        const label = key === "ALL" ? t("all") : key === "SALE" ? t("sale") : key === "PURCHASE" ? t("purchase") : key === "CREDIT" ? t("credit") : t("returnType");
+        const active = filter === key;
+        return <TouchableOpacity key={key} style={[styles.tab, { backgroundColor: active ? colors.primary : colors.secondary }]} onPress={() => setFilter(key)}><Text style={[styles.tabText, { color: active ? "white" : colors.mutedForeground }]}>{label}</Text></TouchableOpacity>;
+      })}</View>
+      <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }, rtl && styles.rowReverse]}>
+        <Feather name="search" size={16} color={colors.mutedForeground} />
+        <TextInput style={[styles.searchInput, { color: colors.foreground }, rtl && styles.rtlInput]} placeholder={t("searchHistory")} value={search} onChangeText={setSearch} placeholderTextColor={colors.mutedForeground} textAlign={rtl ? "right" : "left"} />
+        {!!search && <TouchableOpacity onPress={() => setSearch("")}><Feather name="x-circle" size={16} color={colors.mutedForeground} /></TouchableOpacity>}
+      </View>
+      {filteredBills.length === 0 ? <View style={styles.empty}><Feather name="clock" size={48} color={colors.border} /><Text style={[styles.emptyText, { color: colors.mutedForeground }, rtl && styles.rtlText]}>{t("noHistory")}</Text></View> : <FlatList data={filteredBills} keyExtractor={(b) => b.sessionId} contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 90 }} renderItem={renderBill} />}
+      {history.length > 0 && <TouchableOpacity style={[styles.clearBtn, { backgroundColor: "#fef2f2", borderColor: "#fca5a5", marginBottom: insets.bottom + 80 }]} onPress={handleClear}><Feather name="trash-2" size={14} color={colors.destructive} /><Text style={[styles.clearText, { color: colors.destructive }, rtl && styles.rtlText]}>{t("clearHistory")}</Text></TouchableOpacity>}
+    </View>
+  );
+}
+
+function SumItem({ num, label, color, mutedColor }: { num: string; label: string; color: string; mutedColor: string }) {
+  return <View style={{ flex: 1, alignItems: "center" }}><Text style={{ fontSize: 14, fontWeight: "800", color }}>{num}</Text><Text style={{ fontSize: 8, color: mutedColor, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: "600" }}>{label}</Text></View>;
+}
+
+function useStyles() {
+  return StyleSheet.create({
+    container: { flex: 1 },
+    rtlText: { textAlign: "right", writingDirection: "rtl" },
+    rtlInput: { textAlign: "right" },
+    rowReverse: { flexDirection: "row-reverse" },
+    header: { paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 1, gap: 14 },
+    headerTitle: { fontSize: 24, fontWeight: "800", fontFamily: "Inter_700Bold" },
+    summary: { flexDirection: "row", alignItems: "center", gap: 4 },
+    divider: { width: 1, height: 28 },
+    csvBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8 },
+    csvText: { color: "white", fontWeight: "700", fontSize: 11 },
+    tabs: { flexDirection: "row", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10, gap: 6, borderBottomWidth: 1 },
+    tab: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+    tabText: { fontSize: 10, fontWeight: "700" },
+    searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, margin: 12, borderRadius: 10, paddingHorizontal: 12, borderWidth: 1 },
+    searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
+    empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, paddingHorizontal: 24 },
+    emptyText: { fontSize: 15 },
+    billCard: { borderRadius: 12, marginBottom: 8, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.04, shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, elevation: 1 },
+    billHeader: { flexDirection: "row", alignItems: "center", padding: 12, gap: 10 },
+    typeIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: "center", alignItems: "center" },
+    billInfo: { flex: 1 },
+    billPerson: { fontSize: 11, fontWeight: "700", marginBottom: 1 },
+    billName: { fontWeight: "700", fontSize: 13 },
+    billDate: { fontSize: 10, marginTop: 1 },
+    billRight: { alignItems: "flex-end", gap: 2 },
+    billQty: { fontSize: 16, fontWeight: "800" },
+    billAmount: { fontSize: 12, fontWeight: "700" },
+    badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginTop: 2 },
+    actionRow: { borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 8 },
+    actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8, backgroundColor: "#e0f2fe" },
+    actionBtnText: { fontSize: 11, fontWeight: "700" },
+    billItems: { borderTopWidth: 1, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
+    lineRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 2 },
+    lineName: { fontSize: 12, fontWeight: "600" },
+    lineMeta: { fontSize: 10, marginTop: 1 },
+    lineAmount: { fontSize: 12, fontWeight: "700" },
+    lineReturnBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: "#e0f2fe", alignItems: "center", justifyContent: "center" },
+    miniReturnBadge: { backgroundColor: "#e0f2fe", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
+    miniReturnText: { color: "#0369a1", fontSize: 8, fontWeight: "800" },
+    clearBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 12, marginHorizontal: 12, borderRadius: 10, borderWidth: 1 },
+    clearText: { fontWeight: "600", fontSize: 13 },
+  });
+}
