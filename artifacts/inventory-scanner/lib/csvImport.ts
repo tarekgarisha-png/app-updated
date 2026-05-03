@@ -151,6 +151,12 @@ export async function pickAndReadCSV(): Promise<string | null> {
   return text;
 }
 
+export async function readSharedCSV(uri: string): Promise<string> {
+  return await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+}
+
 export async function shareTextFile(
   content: string,
   filename: string,

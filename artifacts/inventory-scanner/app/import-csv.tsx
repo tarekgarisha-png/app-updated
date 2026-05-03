@@ -68,6 +68,26 @@ export default function ImportCSVScreen() {
     }
   };
 
+  const handleShareSheetImport = async () => {
+    try {
+      const text = await pickAndReadCSV();
+      if (!text) {
+        Alert.alert("", t("importPhoneStorageOnly"));
+        return;
+      }
+      const parsed = parseProductsCSV(text);
+      if (parsed.headerMissing) {
+        Alert.alert("", t("importHeaderError"));
+        return;
+      }
+      setRows(parsed.rows);
+      setErrors(parsed.errors);
+      setStep("preview");
+    } catch (err) {
+      Alert.alert("", err instanceof Error ? err.message : t("importFailed"));
+    }
+  };
+
   const handleConfirm = async () => {
     setStep("importing");
     let added = 0;
@@ -222,6 +242,19 @@ export default function ImportCSVScreen() {
               styles.secondaryBtn,
               { backgroundColor: colors.secondary, borderColor: colors.border },
             ]}
+            onPress={handleShareSheetImport}
+          >
+            <Feather name="share-2" size={16} color={colors.foreground} />
+            <Text style={[styles.secondaryBtnText, { color: colors.foreground }]}>
+              {t("importFromShareSheet")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryBtn,
+              { backgroundColor: colors.secondary, borderColor: colors.border },
+            ]}
             onPress={handleSample}
           >
             <Feather name="download" size={16} color={colors.foreground} />
@@ -232,7 +265,7 @@ export default function ImportCSVScreen() {
             </Text>
           </TouchableOpacity>
           {!syncUrl && (
-            <Text style={[styles.noteText, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
+            <Text style={[styles.infoText, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
               {t("importPhoneFallbackHint")}
             </Text>
           )}
