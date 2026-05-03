@@ -86,7 +86,9 @@ export default function ScannerScreen() {
       ? t("saleMode")
       : mode === "PURCHASE"
         ? t("purchaseMode")
-        : t("creditMode");
+        : rtl
+          ? "دين"
+          : t("confirmCredit");
 
   const confirmLabel =
     mode === "SALE"
