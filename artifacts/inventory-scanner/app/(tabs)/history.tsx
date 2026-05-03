@@ -204,7 +204,7 @@ export default function HistoryScreen() {
           <View style={[styles.typeIcon, { backgroundColor: bgIcon }]}><Feather name={iconName as any} size={16} color={typeColor} /></View>
           <View style={styles.billInfo}>
             {isCredit && item.personName ? <Text style={[styles.billPerson, { color: colors.warning }, rtl && styles.rtlText]} numberOfLines={1}>{item.personName}</Text> : null}
-            {isReturn && <Text style={[styles.billPerson, { color: "#0ea5e9" }, rtl && styles.rtlText]}>{t("returnType")}</Text>}
+            {isReturn && <Text style={[styles.billPerson, { color: "#0ea5e9" }, rtl && styles.rtlText]}>{rtl ? "ارجاع" : t("returnType")}</Text>}
             {isMulti ? <Text style={[styles.billName, { color: colors.foreground }, rtl && styles.rtlText]}>{t("billItems", item.items.length)}</Text> : <Text style={[styles.billName, { color: colors.foreground }, rtl && styles.rtlText]} numberOfLines={1}>{item.items[0]?.name ?? ""}</Text>}
             <Text style={[styles.billDate, { color: colors.mutedForeground }, rtl && styles.rtlText]}>{fmtDate(item.date)}</Text>
           </View>
@@ -237,14 +237,14 @@ export default function HistoryScreen() {
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SumItem num={totals.purchased.toFixed(0)} label={t("purchased")} color={colors.success} mutedColor={colors.mutedForeground} />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <SumItem num={totals.credit.toFixed(0)} label={t("credit")} color={colors.warning} mutedColor={colors.mutedForeground} />
+          <SumItem num={totals.credit.toFixed(0)} label={rtl ? "دين" : t("credit")} color={colors.warning} mutedColor={colors.mutedForeground} />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <SumItem num={totals.returned.toFixed(0)} label={t("returnType")} color="#0ea5e9" mutedColor={colors.mutedForeground} />
+          <SumItem num={totals.returned.toFixed(0)} label={rtl ? "ارجاع" : t("returnType")} color="#0ea5e9" mutedColor={colors.mutedForeground} />
           <TouchableOpacity style={[styles.csvBtn, { backgroundColor: colors.primary }]} onPress={exportCSV}><Feather name="download" size={14} color="white" /><Text style={styles.csvText}>CSV</Text></TouchableOpacity>
         </View>
       </View>
       <View style={[styles.tabs, { backgroundColor: colors.card, borderColor: colors.border }, rtl && styles.rowReverse]}>{(["ALL", "SALE", "PURCHASE", "CREDIT", "RETURN"] as Filter[]).map((key) => {
-        const label = key === "ALL" ? t("all") : key === "SALE" ? t("sale") : key === "PURCHASE" ? t("purchase") : key === "CREDIT" ? t("credit") : t("returnType");
+        const label = key === "ALL" ? t("all") : key === "SALE" ? t("sale") : key === "PURCHASE" ? t("purchase") : key === "CREDIT" ? (rtl ? "دين" : t("credit")) : (rtl ? "ارجاع" : t("returnType"));
         const active = filter === key;
         return <TouchableOpacity key={key} style={[styles.tab, { backgroundColor: active ? colors.primary : colors.secondary }]} onPress={() => setFilter(key)}><Text style={[styles.tabText, { color: active ? "white" : colors.mutedForeground }]}>{label}</Text></TouchableOpacity>;
       })}</View>
