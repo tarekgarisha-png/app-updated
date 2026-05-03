@@ -124,8 +124,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
   }, []);
 
-  // ─── Sync ──────────────────────────────────────────────────────────────────
-
   const syncNow = useCallback(async () => {
     const url = syncUrl;
     if (!url) {
@@ -159,7 +157,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [syncUrl, refresh]);
 
-  // Keep a ref so commitQueue can fire sync without capturing stale closures
   const syncNowRef = useRef(syncNow);
   useEffect(() => {
     syncNowRef.current = syncNow;
@@ -170,8 +167,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     await saveSyncUrl(url);
     setSyncStatus("idle");
   }, []);
-
-  // ─── Data mutations ────────────────────────────────────────────────────────
 
   const saveProduct = useCallback(
     async (p: Product) => {
@@ -186,6 +181,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (barcode: string) => {
       await deleteProductStorage(barcode);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -226,6 +222,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (entryId: string) => {
       await deleteCreditEntryStorage(entryId);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
