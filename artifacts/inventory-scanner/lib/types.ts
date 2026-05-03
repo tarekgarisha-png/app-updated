@@ -6,6 +6,7 @@ export type Product = {
   minStock: number;
   unit: string;
   price: number;
+  updatedAt?: string;
 };
 
 export type TransactionType = "SALE" | "PURCHASE" | "CREDIT" | "RETURN";
@@ -25,6 +26,7 @@ export type HistoryEntry = {
   returnedFrom?: string;
   returned?: boolean;
   date: string;
+  shiftId?: number;
 };
 
 export type BillGroup = {
