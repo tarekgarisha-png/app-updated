@@ -52,6 +52,37 @@ export async function saveProduct(product: Product): Promise<void> {
   await writeProducts(products);
 }
 
+export function buildProductsCSV(products: Product[]): string {
+  return [
+    "Barcode,Name,Arabic Name,Stock,Min Stock,Unit,Price",
+    ...products.map(
+      (p) =>
+        `"${p.barcode}","${p.name}","${p.nameAr}",${p.stock},${p.minStock},"${p.unit}",${p.price.toFixed(2)}`,
+    ),
+  ].join("\n");
+}
+
+export function buildHistoryCSV(history: HistoryEntry[]): string {
+  return [
+    "Date,Type,Barcode,Name,Customer,Qty,Unit Price,Amount,Paid,Returned",
+    ...history.map(
+      (h) =>
+        `"${h.date}","${h.type}","${h.barcode}","${h.name}","${h.personName ?? ""}",${h.qty},${h.unitPrice.toFixed(2)},${h.amount.toFixed(2)},"${h.paid ? "YES" : "NO"}","${h.returned ? "YES" : "NO"}"`,
+    ),
+  ].join("\n");
+}
+
+export function buildDebtsCSV(history: HistoryEntry[]): string {
+  const debts = summarizeDebts(history);
+  return [
+    "Customer,Items,Total Owed,Paid,Remaining,Oldest Date",
+    ...debts.map(
+      (d) =>
+        `"${d.personName}",${d.itemCount},${d.totalOwed.toFixed(2)},${d.partialPaid.toFixed(2)},${d.remainingOwed.toFixed(2)},"${d.oldestDate}"`,
+    ),
+  ].join("\n");
+}
+
 export async function deleteProduct(barcode: string): Promise<void> {
   const products = await getAllProducts();
   const filtered = products.filter((p) => p.barcode !== barcode);
@@ -281,6 +312,69 @@ export async function addPartialPayment(
   };
   payments.unshift(payment);
   await AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments));
+}
+
+function escapePdfText(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildSimplePdfHtml(title: string, subtitle: string, headers: string[], rows: string[][]): string {
+  const bodyRows = rows
+    .map(
+      (row) =>
+        `<tr>${row.map((cell) => `<td>${escapePdfText(cell)}</td>`).join("")}</tr>`,
+    )
+    .join("");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#111}
+    h1{font-size:22px;margin:0 0 6px;text-align:center}
+    .subtitle{text-align:center;color:#666;font-size:12px;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #ddd;padding:8px;font-size:12px;vertical-align:top}
+    th{background:#f3f4f6;text-align:left}
+    .total{font-weight:700}
+  </style></head><body>
+    <h1>${escapePdfText(title)}</h1>
+    <div class="subtitle">${escapePdfText(subtitle)}</div>
+    <table><thead><tr>${headers.map((h) => `<th>${escapePdfText(h)}</th>`).join("")}</tr></thead>
+    <tbody>${bodyRows}</tbody></table>
+  </body></html>`;
+}
+
+export function buildHistoryPdfHtml(history: HistoryEntry[]): string {
+  const rows = history.map((h) => [
+    new Date(h.date).toLocaleString(),
+    h.type,
+    h.personName ?? "",
+    h.name,
+    String(h.qty),
+    (h.unitPrice ?? 0).toFixed(2),
+    (h.amount ?? 0).toFixed(2),
+  ]);
+  return buildSimplePdfHtml(
+    "Qasoda Market - History",
+    `Total entries: ${history.length}`,
+    ["Date", "Type", "Customer", "Item", "Qty", "Unit Price", "Amount"],
+    rows,
+  );
+}
+
+export function buildDebtsPdfHtml(history: HistoryEntry[], partialPayments: PartialPayment[]): string {
+  const debts = summarizeDebts(history, partialPayments);
+  const rows = debts.map((d) => [
+    d.personName,
+    String(d.itemCount),
+    d.oldestDate ? new Date(d.oldestDate).toLocaleDateString() : "",
+    d.totalOwed.toFixed(2),
+    d.partialPaid.toFixed(2),
+    d.remainingOwed.toFixed(2),
+  ]);
+  return buildSimplePdfHtml(
+    "Qasoda Market - Debts",
+    `Total people: ${debts.length}`,
+    ["Customer", "Items", "Since", "Total Owed", "Paid", "Remaining"],
+    rows,
+  );
 }
 
 export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {

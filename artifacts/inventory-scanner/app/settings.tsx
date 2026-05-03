@@ -21,10 +21,13 @@ import { type ShiftId, useShift } from "@/contexts/ShiftContext";
 import { useColors } from "@/hooks/useColors";
 import {
   buildDebtsCSV,
+  buildDebtsPdfHtml,
   buildHistoryCSV,
+  buildHistoryPdfHtml,
   buildProductsCSV,
   summarizeDebts,
 } from "@/lib/storage";
+import * as Print from "expo-print";
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -90,7 +93,27 @@ export default function SettingsScreen() {
     await Sharing.shareAsync(path, { mimeType: "text/csv", dialogTitle: title });
   };
 
-  const handleExport = async (type: "products" | "history" | "debts" | "all") => {
+  const exportPdf = async (html: string, filename: string, title: string) => {
+    const result = await Print.printToFileAsync({ html });
+    if (Platform.OS === "web") {
+      const a = document.createElement("a");
+      a.href = result.uri;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(result.uri, { mimeType: "application/pdf", dialogTitle: title });
+      return;
+    }
+    Alert.alert("", t("noSharing"));
+  };
+
+  const handleExport = async (
+    type: "products" | "history" | "debts" | "all" | "history-pdf" | "debts-pdf",
+  ) => {
     try {
       setExporting(type);
       if (type === "products") {
@@ -101,11 +124,26 @@ export default function SettingsScreen() {
         if (!history.length) { Alert.alert("", t("emptyExport")); return; }
         const csv = buildHistoryCSV(history);
         await shareCSV(csv, `history_${Date.now()}.csv`, t("exportHistory"));
+      } else if (type === "history-pdf") {
+        if (!history.length) { Alert.alert("", t("emptyExport")); return; }
+        await exportPdf(
+          buildHistoryPdfHtml(history),
+          `history_${Date.now()}.pdf`,
+          t("exportHistory"),
+        );
       } else if (type === "debts") {
         const debts = summarizeDebts(history, partialPayments);
         if (!debts.length) { Alert.alert("", t("emptyExport")); return; }
         const csv = buildDebtsCSV(history);
         await shareCSV(csv, `debts_${Date.now()}.csv`, t("exportDebts"));
+      } else if (type === "debts-pdf") {
+        const debts = summarizeDebts(history, partialPayments);
+        if (!debts.length) { Alert.alert("", t("emptyExport")); return; }
+        await exportPdf(
+          buildDebtsPdfHtml(history, partialPayments),
+          `debts_${Date.now()}.pdf`,
+          t("exportDebts"),
+        );
       } else if (type === "all") {
         const lines: string[] = [];
         lines.push("=== PRODUCTS ===");
@@ -397,6 +435,18 @@ export default function SettingsScreen() {
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <ActionRow
+            icon="file-text"
+            iconColor="#7c3aed"
+            iconBg="#ede9fe"
+            label={`${t("exportHistory")} PDF`}
+            desc={t("exportHistoryDesc", history.length)}
+            rtl={rtl}
+            colors={colors}
+            loading={exporting === "history-pdf"}
+            onPress={() => handleExport("history-pdf")}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ActionRow
             icon="user"
             iconColor={colors.warning}
             iconBg="#fef3c7"
@@ -406,6 +456,18 @@ export default function SettingsScreen() {
             colors={colors}
             loading={exporting === "debts"}
             onPress={() => handleExport("debts")}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ActionRow
+            icon="file-text"
+            iconColor="#7c3aed"
+            iconBg="#ede9fe"
+            label={`${t("exportDebts")} PDF`}
+            desc={t("exportDebtsDesc", debtCount)}
+            rtl={rtl}
+            colors={colors}
+            loading={exporting === "debts-pdf"}
+            onPress={() => handleExport("debts-pdf")}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <ActionRow

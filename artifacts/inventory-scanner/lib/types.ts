@@ -62,6 +62,7 @@ export type PartialPayment = {
 export type DebtSummary = {
   personName: string;
   totalOwed: number;
+  partialPaid: number;
   remainingOwed: number;
   itemCount: number;
   entries: HistoryEntry[];
