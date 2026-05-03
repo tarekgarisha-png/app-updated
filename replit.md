@@ -34,10 +34,14 @@ Bilingual (English/Arabic + RTL) barcode-based inventory app for retail.
 
 - **Stack**: Expo SDK 54, expo-router, React Native, AsyncStorage (no backend, fully offline)
 - **Features**:
-  - Barcode scanner with SALE/PURCHASE modes (`expo-camera` `CameraView`)
+  - Barcode scanner with SALE/PURCHASE/CREDIT/RETURN modes (`expo-camera` `CameraView`)
+  - Native beep on barcode scan: 880Hz WAV generated in JS, written to cache, played via `expo-av`; web uses AudioContext
   - Manual barcode entry (works on web)
   - Scan queue with quantity adjustments before commit
   - Product CRUD (`app/product-form.tsx`) with low-stock alerts
+  - History with bill groups, return actions (whole bill or per-item), and PDF print/share via `expo-print` + `expo-sharing`
+  - Debts screen: per-person debt summaries, partial payments (bottom-sheet modal, stored in `inventory:partial_payments:v1`), remaining owed tracking
+  - CSV export for products, history, debts (data management in Settings)
   - In-form barcode camera scan via `components/BarcodeScannerModal.tsx`
   - Bulk CSV import (`app/import-csv.tsx` + `lib/csvImport.ts`); uses `expo-document-picker` on native, hidden `<input type="file">` on web; tolerant header mapping (Barcode/SKU/Code, Name, Arabic Name, Stock, Min Stock, Unit, Price)
   - Transaction history with filtering, search, and CSV export (`expo-file-system/legacy` + `expo-sharing`; web uses Blob download)

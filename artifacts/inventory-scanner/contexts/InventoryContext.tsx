@@ -10,12 +10,14 @@ import React, {
 
 import { isRTLFor, tFor, type Lang } from "@/lib/i18n";
 import {
+  addPartialPayment as addPartialPaymentStorage,
   clearHistory as clearHistoryStorage,
   commitScanQueue,
   deleteCreditEntry as deleteCreditEntryStorage,
   deleteProduct as deleteProductStorage,
   getAllProducts,
   getHistory,
+  getPartialPayments,
   markCreditEntryPaid as markCreditEntryPaidStorage,
   markPersonDebtsPaid as markPersonDebtsPaidStorage,
   returnBillSession as returnBillSessionStorage,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/storage";
 import type {
   HistoryEntry,
+  PartialPayment,
   Product,
   ScanQueueItem,
   TransactionType,
@@ -32,6 +35,7 @@ import type {
 type InventoryContextValue = {
   products: Product[];
   history: HistoryEntry[];
+  partialPayments: PartialPayment[];
   loading: boolean;
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -49,6 +53,7 @@ type InventoryContextValue = {
   removeCreditEntry: (entryId: string) => Promise<void>;
   returnBill: (sessionId: string) => Promise<void>;
   returnEntry: (entryId: string) => Promise<void>;
+  addPartialPayment: (personName: string, amount: number, note?: string) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -58,13 +63,19 @@ const LANG_KEY = "inventory:lang:v1";
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [partialPayments, setPartialPayments] = useState<PartialPayment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lang, setLangState] = useState<Lang>("en");
 
   const refresh = useCallback(async () => {
-    const [p, h] = await Promise.all([getAllProducts(), getHistory(600)]);
+    const [p, h, pp] = await Promise.all([
+      getAllProducts(),
+      getHistory(600),
+      getPartialPayments(),
+    ]);
     setProducts(p);
     setHistory(h);
+    setPartialPayments(pp);
   }, []);
 
   useEffect(() => {
@@ -155,10 +166,19 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     [refresh],
   );
 
+  const addPartialPayment = useCallback(
+    async (personName: string, amount: number, note?: string) => {
+      await addPartialPaymentStorage(personName, amount, note);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const value = useMemo<InventoryContextValue>(
     () => ({
       products,
       history,
+      partialPayments,
       loading,
       lang,
       setLang,
@@ -172,10 +192,12 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       removeCreditEntry,
       returnBill,
       returnEntry,
+      addPartialPayment,
     }),
     [
       products,
       history,
+      partialPayments,
       loading,
       lang,
       setLang,
@@ -189,6 +211,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       removeCreditEntry,
       returnBill,
       returnEntry,
+      addPartialPayment,
     ],
   );
 

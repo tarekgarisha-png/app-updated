@@ -49,10 +49,20 @@ export type ScanQueueItem = {
 
 export type ScanMode = "SALE" | "PURCHASE" | "CREDIT";
 
+export type PartialPayment = {
+  id: string;
+  personName: string;
+  amount: number;
+  date: string;
+  note?: string;
+};
+
 export type DebtSummary = {
   personName: string;
   totalOwed: number;
+  remainingOwed: number;
   itemCount: number;
   entries: HistoryEntry[];
   oldestDate: string;
+  partialPayments: PartialPayment[];
 };
