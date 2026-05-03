@@ -381,6 +381,8 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importDownloadSample: "Download Sample File",
     backupBundle: "Backup Bundle",
     backupBundleDesc: "Export products, history, debts, and partial payments.",
+    importPhoneStorageOnly: "Choose a CSV file from phone storage or the Files app.",
+    importPhoneFallbackHint: "If the file does not appear, move it to Files first and try again.",
     importInstructions:
       "CSV must contain these columns: Barcode (required), Name (required), Arabic Name, Stock, Min Stock, Unit, Price.",
     personName: "Customer Name",

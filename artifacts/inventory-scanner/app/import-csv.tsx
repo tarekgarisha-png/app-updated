@@ -47,21 +47,7 @@ export default function ImportCSVScreen() {
     try {
       const text = await pickAndReadCSV();
       if (!text) {
-        if (syncUrl) {
-          const remote = await readRemoteCSV();
-          const parsedRemote = parseProductsCSV(remote);
-          if (parsedRemote.headerMissing) {
-            Alert.alert("", t("importHeaderError"));
-            return;
-          }
-          if (parsedRemote.rows.length === 0) {
-            Alert.alert("", t("importNoRows"));
-            return;
-          }
-          setRows(parsedRemote.rows);
-          setErrors(parsedRemote.errors);
-          setStep("preview");
-        }
+        Alert.alert("", t("importPhoneStorageOnly"));
         return;
       }
 
@@ -203,6 +189,23 @@ export default function ImportCSVScreen() {
               {t("importInstructions")}
             </Text>
           </View>
+          <View
+            style={[
+              styles.infoCard,
+              { backgroundColor: "#ecfeff", borderColor: "#a5f3fc" },
+            ]}
+          >
+            <Feather name="smartphone" size={18} color="#0891b2" />
+            <Text
+              style={[
+                styles.infoText,
+                { color: "#155e75" },
+                rtl && styles.rtlText,
+              ]}
+            >
+              {t("importPhoneStorageOnly")}
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
@@ -228,6 +231,11 @@ export default function ImportCSVScreen() {
               {t("importDownloadSample")}
             </Text>
           </TouchableOpacity>
+          {!syncUrl && (
+            <Text style={[styles.noteText, { color: colors.mutedForeground }, rtl && styles.rtlText]}>
+              {t("importPhoneFallbackHint")}
+            </Text>
+          )}
         </View>
       )}
 

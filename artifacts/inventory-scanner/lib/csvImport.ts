@@ -1,6 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import { Platform } from "react-native";
 
 import type { Product } from "./types";
 
@@ -139,11 +138,8 @@ export function buildSampleCSV(): string {
 }
 
 export async function pickAndReadCSV(): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return await pickAndReadCSVWeb();
-  }
   const res = await DocumentPicker.getDocumentAsync({
-    type: ["text/csv", "text/comma-separated-values", "text/plain", "*/*"],
+    type: ["text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"],
     copyToCacheDirectory: true,
     multiple: false,
   });
@@ -164,31 +160,4 @@ export async function shareTextFile(
     encoding: FileSystem.EncodingType.UTF8,
   });
   return path;
-}
-
-function pickAndReadCSVWeb(): Promise<string | null> {
-  return new Promise((resolve) => {
-    if (typeof document === "undefined") {
-      resolve(null);
-      return;
-    }
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv,text/csv,text/plain";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) {
-        resolve(null);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve(typeof reader.result === "string" ? reader.result : null);
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsText(file);
-    };
-    input.oncancel = () => resolve(null);
-    input.click();
-  });
 }
