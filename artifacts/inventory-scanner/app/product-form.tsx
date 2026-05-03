@@ -22,6 +22,7 @@ type FormState = {
   barcode: string;
   name: string;
   nameAr: string;
+  category: string;
   stock: string;
   minStock: string;
   unit: string;
@@ -32,6 +33,7 @@ const EMPTY: FormState = {
   barcode: "",
   name: "",
   nameAr: "",
+  category: "",
   stock: "",
   minStock: "5",
   unit: "pcs",
@@ -64,6 +66,7 @@ export default function ProductFormScreen() {
         barcode: existing.barcode,
         name: existing.name,
         nameAr: existing.nameAr,
+        category: existing.category ?? "",
         stock: String(existing.stock),
         minStock: String(existing.minStock),
         unit: existing.unit,
@@ -104,6 +107,7 @@ export default function ProductFormScreen() {
         barcode: form.barcode.trim(),
         name: form.name.trim(),
         nameAr: form.nameAr.trim(),
+        category: form.category.trim(),
         stock: parseInt(form.stock, 10) || 0,
         minStock: parseInt(form.minStock, 10) || 5,
         unit: form.unit.trim() || "pcs",
@@ -292,6 +296,15 @@ export default function ProductFormScreen() {
           value={form.nameAr}
           onChangeText={(v) => setForm((f) => ({ ...f, nameAr: v }))}
           placeholder="اسم المنتج بالعربي"
+          colors={colors}
+        />
+
+        <Field
+          label={t("category")}
+          rtl={rtl}
+          value={form.category}
+          onChangeText={(v) => setForm((f) => ({ ...f, category: v }))}
+          placeholder={t("categoryPlaceholder")}
           colors={colors}
         />
 
