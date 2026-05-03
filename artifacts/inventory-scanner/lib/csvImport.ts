@@ -41,7 +41,7 @@ function parseCSVLine(line: string): string[] {
 }
 
 function normalizeHeader(h: string): string {
-  return h.toLowerCase().replace(/[^a-z]/g, "");
+  return h.toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]/g, "");
 }
 
 const HEADER_MAP: Record<string, keyof Product> = {
@@ -51,9 +51,12 @@ const HEADER_MAP: Record<string, keyof Product> = {
   name: "name",
   productname: "name",
   englishname: "name",
+  itemname: "name",
+  product: "name",
   arabicname: "nameAr",
   namear: "nameAr",
   arname: "nameAr",
+  arabic: "nameAr",
   stock: "stock",
   qty: "stock",
   quantity: "stock",
@@ -64,6 +67,8 @@ const HEADER_MAP: Record<string, keyof Product> = {
   uom: "unit",
   price: "price",
   cost: "price",
+  sellprice: "price",
+  unitprice: "price",
 };
 
 export type ParsedCSV = {
