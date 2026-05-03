@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useInventory, useT } from "@/contexts/InventoryContext";
 import { useColors } from "@/hooks/useColors";
+import { fetchText } from "@/lib/sync";
 import {
   buildSampleCSV,
   parseProductsCSV,
@@ -30,17 +31,39 @@ export default function ImportCSVScreen() {
   const colors = useColors();
   const { t, rtl } = useT();
   const insets = useSafeAreaInsets();
-  const { products, saveProduct } = useInventory();
+  const { products, saveProduct, syncUrl } = useInventory();
 
   const [step, setStep] = useState<Step>("idle");
   const [rows, setRows] = useState<Partial<Product>[]>([]);
   const [errors, setErrors] = useState<{ line: number; reason: string }[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  const readRemoteCSV = async () => {
+    if (!syncUrl) throw new Error(t("syncOff"));
+    const remote = await fetchText(syncUrl, "/export/products.csv");
+    return remote;
+  };
+
   const handlePickFile = async () => {
     try {
       const text = await pickAndReadCSV();
       if (!text) {
+        if (syncUrl) {
+          const remote = await readRemoteCSV();
+          const parsedRemote = parseProductsCSV(remote);
+          if (parsedRemote.headerMissing) {
+            Alert.alert("\", t("importHeaderError"));
+            return;
+          }
+          if (parsedRemote.rows.length === 0) {
+            Alert.alert("\", t("importNoRows"));
+            return;
+          }
+          setRows(parsedRemote.rows);
+          setErrors(parsedRemote.errors);
+          setStep("preview");
+          return;
+        }
         return;
       }
 
@@ -105,7 +128,9 @@ export default function ImportCSVScreen() {
       const a = document.createElement("a");
       a.href = url;
       a.download = "products_sample.csv";
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
       return;
     }
@@ -186,7 +211,7 @@ export default function ImportCSVScreen() {
             onPress={handlePickFile}
           >
             <Feather name="upload" size={18} color="white" />
-            <Text style={styles.primaryBtnText}>{t("importPickFile")}</Text>
+            <Text style={styles.primaryBtnText}>{syncUrl ? t("importPickFile") + " / الإنترنت" : t("importPickFile")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -214,7 +239,7 @@ export default function ImportCSVScreen() {
               { backgroundColor: "#dbeafe", borderColor: "#93c5fd" },
             ]}
           >
-            <Text style={[styles.previewText, { color: "#1e40af" }]}>
+            <Text style={[styles.previewText, { color: "#1e40af" }]}> 
               {t("importPreview", rows.length)}
             </Text>
             {errors.length > 0 && (
@@ -365,7 +390,7 @@ export default function ImportCSVScreen() {
               ]}
             >
               <Feather name="alert-circle" size={18} color="#ef4444" />
-              <Text style={[styles.infoText, { color: "#ef4444" }]}>
+              <Text style={[styles.infoText, { color: "#ef4444" }]}> 
                 {result.errors
                   .slice(0, 5)
                   .map((e) => `Line ${e.line}: ${e.reason}`)
@@ -393,102 +418,24 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   rtlText: { textAlign: "right", writingDirection: "rtl" },
   rowReverse: { flexDirection: "row-reverse" },
-
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-  },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 1 },
   headerTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  infoCard: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: "flex-start",
-  },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  infoCard: { flexDirection: "row", gap: 10, padding: 14, borderRadius: 10, borderWidth: 1, alignItems: "flex-start" },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
-
-  primaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
+  primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 12 },
   primaryBtnText: { color: "white", fontWeight: "700", fontSize: 14 },
-
-  secondaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
+  secondaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 1 },
   secondaryBtnText: { fontWeight: "700", fontSize: 14 },
-
-  previewBanner: {
-    margin: 12,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
+  previewBanner: { margin: 12, padding: 12, borderRadius: 10, borderWidth: 1 },
   previewText: { fontWeight: "700", fontSize: 14 },
-
-  previewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 6,
-    gap: 10,
-  },
-  previewBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    minWidth: 36,
-    alignItems: "center",
-  },
+  previewRow: { flexDirection: "row", alignItems: "center", padding: 10, borderRadius: 10, marginBottom: 6, gap: 10 },
+  previewBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, minWidth: 36, alignItems: "center" },
   previewName: { fontWeight: "700", fontSize: 13 },
   previewSub: { fontSize: 11, marginTop: 2 },
-
-  bottomBar: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 12,
-    borderTopWidth: 1,
-  },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  doneCard: {
-    alignItems: "center",
-    padding: 22,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-  },
+  bottomBar: { flexDirection: "row", gap: 10, padding: 12, borderTopWidth: 1 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
+  doneCard: { alignItems: "center", padding: 22, borderRadius: 14, borderWidth: 1, gap: 8 },
   doneTitle: { color: "#166534", fontSize: 18, fontWeight: "800" },
   doneMsg: { color: "#166534", fontSize: 13, textAlign: "center" },
 });

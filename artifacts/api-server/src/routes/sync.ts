@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getData, mergeData } from "../lib/store";
+import { buildDebtsCSV, buildHistoryCSV, buildProductsCSV, getData, mergeData } from "../lib/store";
 
 const router: IRouter = Router();
 
@@ -23,6 +23,21 @@ router.post("/sync", (req, res) => {
   });
 
   res.json(merged);
+});
+
+router.get("/export/products.csv", (_req, res) => {
+  const data = getData();
+  res.type("text/csv").send(buildProductsCSV(data.products));
+});
+
+router.get("/export/history.csv", (_req, res) => {
+  const data = getData();
+  res.type("text/csv").send(buildHistoryCSV(data.history));
+});
+
+router.get("/export/debts.csv", (_req, res) => {
+  const data = getData();
+  res.type("text/csv").send(buildDebtsCSV(data.history));
 });
 
 export default router;

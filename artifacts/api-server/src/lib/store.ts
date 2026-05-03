@@ -90,10 +90,7 @@ export function getData(): SyncData {
   return store;
 }
 
-export function mergeData(
-  incoming: Omit<SyncData, "updatedAt">,
-): SyncData {
-  // ─── Products: newer updatedAt wins; server wins if no timestamps ──────────
+export function mergeData(incoming: Omit<SyncData, "updatedAt">): SyncData {
   const productMap = new Map<string, SyncProduct>(
     store.products.map((p) => [p.barcode, p]),
   );
@@ -104,22 +101,17 @@ export function mergeData(
     } else {
       const serverTs = existing.updatedAt ?? "";
       const incomingTs = p.updatedAt ?? "";
-      if (incomingTs > serverTs) {
-        productMap.set(p.barcode, p);
-      }
-      // else server copy is newer or equal — keep it
+      if (incomingTs > serverTs) productMap.set(p.barcode, p);
     }
   }
 
-  // ─── History: union by id; OR boolean flags ─────────────────────────────────
   const historyMap = new Map<string, SyncHistoryEntry>(
     store.history.map((h) => [h.id, h]),
   );
   for (const h of incoming.history ?? []) {
     const existing = historyMap.get(h.id);
-    if (!existing) {
-      historyMap.set(h.id, h);
-    } else {
+    if (!existing) historyMap.set(h.id, h);
+    else {
       historyMap.set(h.id, {
         ...existing,
         paid: existing.paid || h.paid,
@@ -129,14 +121,11 @@ export function mergeData(
     }
   }
 
-  // ─── Partial payments: append-only by id ─────────────────────────────────
   const paymentMap = new Map<string, SyncPartialPayment>(
     store.partialPayments.map((p) => [p.id, p]),
   );
   for (const p of incoming.partialPayments ?? []) {
-    if (!paymentMap.has(p.id)) {
-      paymentMap.set(p.id, p);
-    }
+    if (!paymentMap.has(p.id)) paymentMap.set(p.id, p);
   }
 
   store = {
@@ -152,4 +141,48 @@ export function mergeData(
 
   saveStore();
   return store;
+}
+
+function csvEscape(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const str = String(value).replace(/"/g, '""');
+  return `"${str}"`;
+}
+
+export function buildProductsCSV(products: SyncProduct[]): string {
+  const header = "Barcode,Name,Arabic Name,Stock,Min Stock,Unit,Price\n";
+  const rows = products
+    .map(
+      (p) =>
+        `${csvEscape(p.barcode)},${csvEscape(p.name)},${csvEscape(p.nameAr)},${p.stock},${p.minStock},${csvEscape(p.unit)},${p.price}`,
+    )
+    .join("\n");
+  return header + rows;
+}
+
+export function buildHistoryCSV(history: SyncHistoryEntry[]): string {
+  const header =
+    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid,Returned,Shift\n";
+  const rows = history
+    .map(
+      (h) =>
+        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""},${h.returned ? "YES" : ""},${h.shiftId ?? ""}`,
+    )
+    .join("\n");
+  return header + rows;
+}
+
+export function buildDebtsCSV(history: SyncHistoryEntry[]): string {
+  const debts = history.reduce<Record<string, { name: string; total: number }>>((acc, h) => {
+    if (h.type !== "CREDIT" || h.paid) return acc;
+    const key = h.personName ?? "";
+    if (!acc[key]) acc[key] = { name: key, total: 0 };
+    acc[key].total += h.amount ?? 0;
+    return acc;
+  }, {});
+  const header = "Person,Total Owed\n";
+  const rows = Object.values(debts)
+    .map((d) => `${csvEscape(d.name)},${d.total.toFixed(2)}`)
+    .join("\n");
+  return header + rows;
 }

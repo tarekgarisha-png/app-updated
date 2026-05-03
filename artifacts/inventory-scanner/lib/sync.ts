@@ -54,3 +54,10 @@ export async function pushAndPull(
     partialPayments: data.partialPayments ?? [],
   };
 }
+
+export async function fetchText(serverUrl: string, path: string): Promise<string> {
+  const url = `${serverUrl.replace(/\/+$/, "")}${path}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.text();
+}
