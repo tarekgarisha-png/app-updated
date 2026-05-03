@@ -8,7 +8,7 @@ export type Product = {
   price: number;
 };
 
-export type TransactionType = "SALE" | "PURCHASE" | "CREDIT";
+export type TransactionType = "SALE" | "PURCHASE" | "CREDIT" | "RETURN";
 
 export type HistoryEntry = {
   id: string;
@@ -22,6 +22,8 @@ export type HistoryEntry = {
   paid?: boolean;
   paidAt?: string;
   sessionId?: string;
+  returnedFrom?: string;
+  returned?: boolean;
   date: string;
 };
 
@@ -34,6 +36,7 @@ export type BillGroup = {
   totalQty: number;
   items: HistoryEntry[];
   paid?: boolean;
+  returned?: boolean;
 };
 
 export type ScanQueueItem = {

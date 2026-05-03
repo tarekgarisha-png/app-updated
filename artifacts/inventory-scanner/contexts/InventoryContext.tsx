@@ -18,6 +18,8 @@ import {
   getHistory,
   markCreditEntryPaid as markCreditEntryPaidStorage,
   markPersonDebtsPaid as markPersonDebtsPaidStorage,
+  returnBillSession as returnBillSessionStorage,
+  returnSingleEntry as returnSingleEntryStorage,
   saveProduct as saveProductStorage,
 } from "@/lib/storage";
 import type {
@@ -45,6 +47,8 @@ type InventoryContextValue = {
   markEntryPaid: (entryId: string, paid: boolean) => Promise<void>;
   markPersonPaid: (personName: string) => Promise<void>;
   removeCreditEntry: (entryId: string) => Promise<void>;
+  returnBill: (sessionId: string) => Promise<void>;
+  returnEntry: (entryId: string) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -135,6 +139,22 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     [refresh],
   );
 
+  const returnBill = useCallback(
+    async (sessionId: string) => {
+      await returnBillSessionStorage(sessionId);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const returnEntry = useCallback(
+    async (entryId: string) => {
+      await returnSingleEntryStorage(entryId);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const value = useMemo<InventoryContextValue>(
     () => ({
       products,
@@ -150,6 +170,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       markEntryPaid,
       markPersonPaid,
       removeCreditEntry,
+      returnBill,
+      returnEntry,
     }),
     [
       products,
@@ -165,6 +187,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       markEntryPaid,
       markPersonPaid,
       removeCreditEntry,
+      returnBill,
+      returnEntry,
     ],
   );
 
