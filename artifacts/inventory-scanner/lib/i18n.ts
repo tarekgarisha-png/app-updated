@@ -99,7 +99,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     shareBillFailed: "فشل مشاركة الفاتورة",
     exportProducts: "تصدير المنتجات",
     exportHistory: "تصدير السجل",
-    exportDebts: "تصدير الديون",
+    exportDebts: "تصدير دين",
     exportAll: "تصدير الكل",
     dataManagement: "إدارة البيانات",
     importProducts: "استيراد المنتجات",
