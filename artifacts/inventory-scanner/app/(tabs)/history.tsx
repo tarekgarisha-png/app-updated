@@ -98,7 +98,7 @@ export default function HistoryScreen() {
         await Print.printAsync({ html });
       }
     } catch {
-      Alert.alert(t("printError"), "");
+      Alert.alert("", t("printError"));
     } finally {
       setPrinting(null);
     }
