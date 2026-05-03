@@ -63,7 +63,7 @@ export default function HistoryScreen() {
   const colors = useColors();
   const { t, rtl } = useT();
   const insets = useSafeAreaInsets();
-  const { history, clearAllHistory, returnBill, returnEntry } = useInventory();
+  const { history, clearAllHistory, returnBill, returnEntry, syncUrl } = useInventory();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -143,6 +143,15 @@ export default function HistoryScreen() {
         return;
       }
       const csv = buildHistoryCSV(history);
+      if (syncUrl) {
+        const url = `${syncUrl.replace(/\/+$/, "")}/export/history.csv`;
+        if (Platform.OS === "web") {
+          window.open(url, "_blank");
+        } else {
+          await Linking.openURL(url);
+        }
+        return;
+      }
       if (Platform.OS === "web") {
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
@@ -224,6 +233,7 @@ export default function HistoryScreen() {
         <View style={[styles.actionRow, { borderTopColor: colors.border }, rtl && styles.rowReverse]}>
           {canReturn && !allReturned && <TouchableOpacity style={styles.actionBtn} onPress={() => handleReturnBill(item)}><Feather name="rotate-ccw" size={12} color="#0ea5e9" /><Text style={[styles.actionBtnText, { color: "#0369a1" }]}>{isMulti ? t("returnBill") : t("returnItem")}</Text></TouchableOpacity>}
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#ecfeff" }]} onPress={() => handleShareWhatsApp(item)}><Feather name="message-circle" size={12} color="#16a34a" /><Text style={[styles.actionBtnText, { color: "#16a34a" }]}>{t("shareWhatsApp")}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f3e8ff" }]} onPress={exportCSV} disabled={isPrinting}><Feather name="download" size={12} color="#7c3aed" /><Text style={[styles.actionBtnText, { color: "#7c3aed" }]}>{t("exportCSV")}</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f3e8ff" }]} onPress={() => handlePrintBill(item)} disabled={isPrinting}><Feather name="printer" size={12} color="#7c3aed" /><Text style={[styles.actionBtnText, { color: "#7c3aed" }]}>{isPrinting ? "..." : t("printBill")}</Text></TouchableOpacity>
         </View>
         {isOpen && <View style={[styles.billItems, { borderTopColor: colors.border }]}>{item.items.map((h) => {
@@ -245,7 +255,6 @@ export default function HistoryScreen() {
           <SumItem num={totals.credit.toFixed(0)} label={rtl ? "دين" : t("credit")} color={colors.warning} mutedColor={colors.mutedForeground} />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SumItem num={totals.returned.toFixed(0)} label={rtl ? "ارجاع" : t("returnType")} color="#0ea5e9" mutedColor={colors.mutedForeground} />
-          <TouchableOpacity style={[styles.csvBtn, { backgroundColor: colors.primary }]} onPress={exportCSV}><Feather name="download" size={14} color="white" /><Text style={styles.csvText}>CSV</Text></TouchableOpacity>
         </View>
       </View>
       <View style={[styles.tabs, { backgroundColor: colors.card, borderColor: colors.border }, rtl && styles.rowReverse]}>{(["ALL", "SALE", "PURCHASE", "CREDIT", "RETURN"] as Filter[]).map((key) => {
