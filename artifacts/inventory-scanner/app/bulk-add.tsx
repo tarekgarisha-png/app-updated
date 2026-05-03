@@ -29,7 +29,11 @@ export default function BulkAddScreen() {
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<RowState[]>([]);
 
-  const existing = useMemo(() => new Set(products.map((p) => p.barcode)), [products]);
+  const existing = useMemo(() => {
+    const map = new Map<string, Product>();
+    for (const p of products) map.set(p.barcode, p);
+    return map;
+  }, [products]);
 
   const parseInput = () => {
     const parsed = parseProductsCSV(text);
@@ -50,24 +54,36 @@ export default function BulkAddScreen() {
     let updated = 0;
     let skipped = 0;
     try {
-      for (const row of rows) {
-        if (!row.barcode || !row.name) {
-          skipped++;
-          continue;
-        }
-        const merged: Product = {
-          barcode: row.barcode,
-          name: row.name,
-          nameAr: row.nameAr ?? "",
-          stock: row.stock ?? 0,
-          minStock: row.minStock ?? 5,
-          unit: row.unit ?? "pcs",
-          price: row.price ?? 0,
-        };
-        await saveProduct(merged);
-        if (existing.has(row.barcode)) updated++;
-        else added++;
-      }
+      const now = new Date().toISOString();
+      const mergedRows = rows
+        .filter((row) => row.barcode && row.name)
+        .map((row) => {
+          const old = existing.get(row.barcode!);
+          const merged: Product = {
+            barcode: row.barcode!,
+            name: row.name!,
+            nameAr: row.nameAr ?? old?.nameAr ?? "",
+            category: row.category ?? old?.category ?? "",
+            stock: row.stock ?? old?.stock ?? 0,
+            minStock: row.minStock ?? old?.minStock ?? 5,
+            unit: row.unit ?? old?.unit ?? "pcs",
+            price: row.price ?? old?.price ?? 0,
+            updatedAt: now,
+          };
+          return merged;
+        });
+      skipped = rows.length - mergedRows.length;
+      const [newRows, existingRows] = mergedRows.reduce<[Product[], Product[]]>(
+        ([add, update], row) => {
+          if (existing.has(row.barcode)) update.push(row);
+          else add.push(row);
+          return [add, update];
+        },
+        [[], []],
+      );
+      await Promise.all([...newRows, ...existingRows].map((row) => saveProduct(row)));
+      added = newRows.length;
+      updated = existingRows.length;
       Alert.alert("", t("importDoneMsg", added, updated, skipped));
       router.back();
     } catch {
@@ -104,7 +120,9 @@ export default function BulkAddScreen() {
               <View key={row.key} style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }, rtl && styles.rowReverse]}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.foreground, fontWeight: "700" }}>{row.name}</Text>
-                  <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{row.barcode} · {existing.has(String(row.barcode)) ? t("updated") : t("added")}</Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                    {row.barcode} · {row.category ?? t("category")} · {existing.has(String(row.barcode)) ? t("updated") : t("added")}
+                  </Text>
                 </View>
               </View>
             ))}
