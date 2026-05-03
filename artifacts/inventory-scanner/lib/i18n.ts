@@ -12,6 +12,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     tabProducts: "المنتجات",
     tabHistory: "السجل",
     tabExport: "تصدير",
+    tabDebts: "دين",
 
     saleMode: "وضع البيع",
     purchaseMode: "وضع الشراء",
@@ -162,6 +163,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     tabProducts: "Products",
     tabHistory: "History",
     tabExport: "Export",
+    tabDebts: "Debts",
 
     saleMode: "Sale Mode",
     purchaseMode: "Purchase Mode",
