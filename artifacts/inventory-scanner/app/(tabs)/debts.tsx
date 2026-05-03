@@ -159,23 +159,23 @@ export default function DebtsScreen() {
           </Text>
         </View>
       ) : (
-        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-          {dueSoon.length > 0 && (
-            <View style={[styles.reminderCard, { backgroundColor: "#fef3c7" }]}>
-              <Feather name="bell" size={14} color="#b45309" />
-              <Text style={[styles.reminderText, rtl && styles.rtlText]}>
-                {rtl ? "تذكير: " : "Reminder: "}
-                {dueSoon.map((d) => d.personName).join(", ")}
-              </Text>
-            </View>
-          )}
-        </View>
-        <
-        <FlatList
-          data={debts}
-          keyExtractor={(d) => d.personName}
-          contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 90 }}
-          renderItem={({ item }) => {
+        <>
+          <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+            {dueSoon.length > 0 && (
+              <View style={[styles.reminderCard, { backgroundColor: "#fef3c7" }]}>
+                <Feather name="bell" size={14} color="#b45309" />
+                <Text style={[styles.reminderText, rtl && styles.rtlText]}>
+                  {rtl ? "تذكير: " : "Reminder: "}
+                  {dueSoon.map((d) => d.personName).join(", ")}
+                </Text>
+              </View>
+            )}
+          </View>
+          <FlatList
+            data={debts}
+            keyExtractor={(d) => d.personName}
+            contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 90 }}
+            renderItem={({ item }) => {
             const isOpen = !!expanded[item.personName];
             const totalPartialPaid = item.partialPayments.reduce((s, p) => s + p.amount, 0);
             const hasPartialPayments = item.partialPayments.length > 0;
@@ -289,7 +289,8 @@ export default function DebtsScreen() {
               </View>
             );
           }}
-        />
+          />
+        </>
       )}
 
       {/* ── Partial Payment Modal ── */}
