@@ -173,6 +173,26 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     addToBill: "إضافة للفاتورة",
     customNamePlaceholder: "مثال: خبز، سكر...",
     qty: "الكمية",
+
+    returnType: "مرتجع",
+    returnItem: "إرجاع",
+    returnBill: "إرجاع الفاتورة",
+    returnConfirm: (name: string) => `إرجاع "${name}" واسترداد المخزون؟`,
+    returnBillConfirm: (n: number) => `إرجاع ${n} صنف واسترداد المخزون؟`,
+    returnSuccess: "تم الإرجاع بنجاح",
+    alreadyReturned: "تم إرجاعه مسبقاً",
+    returnBadge: "مرتجع",
+
+    dataManagement: "إدارة البيانات",
+    exportAll: "تصدير الكل",
+    exportProducts: "تصدير المنتجات",
+    exportHistory: "تصدير السجل",
+    exportDebts: "تصدير الديون",
+    importProducts: "استيراد المنتجات",
+    exportProductsDesc: (n: number) => `${n} منتج`,
+    exportHistoryDesc: (n: number) => `${n} معاملة`,
+    exportDebtsDesc: (n: number) => `${n} شخص مدين`,
+    exportSharing: "مشاركة",
   },
 
   en: {
@@ -345,6 +365,26 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     addToBill: "Add to Bill",
     customNamePlaceholder: "e.g. Bread, Sugar...",
     qty: "Qty",
+
+    returnType: "RETURN",
+    returnItem: "Return",
+    returnBill: "Return Bill",
+    returnConfirm: (name: string) => `Return "${name}" and restore stock?`,
+    returnBillConfirm: (n: number) => `Return ${n} item(s) and restore their stock?`,
+    returnSuccess: "Returned successfully",
+    alreadyReturned: "Already returned",
+    returnBadge: "Returned",
+
+    dataManagement: "Data Management",
+    exportAll: "Export All",
+    exportProducts: "Export Products",
+    exportHistory: "Export History",
+    exportDebts: "Export Debts",
+    importProducts: "Import Products",
+    exportProductsDesc: (n: number) => `${n} product(s)`,
+    exportHistoryDesc: (n: number) => `${n} transaction(s)`,
+    exportDebtsDesc: (n: number) => `${n} person(s) owing`,
+    exportSharing: "Share",
   },
 };
 

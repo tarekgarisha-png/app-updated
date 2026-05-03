@@ -28,13 +28,13 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-type Filter = "ALL" | "SALE" | "PURCHASE" | "CREDIT";
+type Filter = "ALL" | "SALE" | "PURCHASE" | "CREDIT" | "RETURN";
 
 export default function HistoryScreen() {
   const colors = useColors();
   const { t, rtl } = useT();
   const insets = useSafeAreaInsets();
-  const { history, clearAllHistory } = useInventory();
+  const { history, clearAllHistory, returnBill, returnEntry } = useInventory();
 
   const [search, setSearch] = useState<string>("");
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -71,13 +71,14 @@ export default function HistoryScreen() {
   };
 
   const totals = useMemo(() => {
-    let sold = 0, purchased = 0, credit = 0;
+    let sold = 0, purchased = 0, credit = 0, returned = 0;
     history.forEach((h) => {
       if (h.type === "SALE") sold += h.amount ?? 0;
       else if (h.type === "PURCHASE") purchased += h.amount ?? 0;
       else if (h.type === "CREDIT" && !h.paid) credit += h.amount ?? 0;
+      else if (h.type === "RETURN") returned += h.amount ?? 0;
     });
-    return { sold, purchased, credit };
+    return { sold, purchased, credit, returned };
   }, [history]);
 
   const toggleBill = (sessionId: string) => {
@@ -136,6 +137,47 @@ export default function HistoryScreen() {
     ]);
   };
 
+  const handleReturnBill = (bill: BillGroup) => {
+    const returnable = bill.items.filter(
+      (h) => !h.returned && (h.type === "SALE" || h.type === "CREDIT"),
+    );
+    if (!returnable.length) {
+      Alert.alert("", t("alreadyReturned"));
+      return;
+    }
+    Alert.alert(
+      t("returnBill"),
+      t("returnBillConfirm", returnable.length),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("returnItem"),
+          style: "default",
+          onPress: async () => {
+            await returnBill(bill.sessionId);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleReturnEntry = (entryId: string, name: string) => {
+    Alert.alert(
+      t("returnItem"),
+      t("returnConfirm", name),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("returnItem"),
+          style: "default",
+          onPress: async () => {
+            await returnEntry(entryId);
+          },
+        },
+      ],
+    );
+  };
+
   const headerTopPadding = Platform.OS === "web" ? 67 : insets.top + 8;
   const styles = useStyles();
 
@@ -143,14 +185,39 @@ export default function HistoryScreen() {
     const isOpen = !!expanded[item.sessionId];
     const isSale = item.type === "SALE";
     const isCredit = item.type === "CREDIT";
+    const isReturn = item.type === "RETURN";
+    const isPurchase = item.type === "PURCHASE";
+
     const typeColor = isCredit
       ? colors.warning
-      : isSale
-        ? colors.destructive
-        : colors.success;
-    const bgIcon = isCredit ? "#fef3c7" : isSale ? "#fee2e2" : "#dcfce7";
-    const sign = item.type === "PURCHASE" ? "+" : "−";
+      : isReturn
+        ? "#0ea5e9"
+        : isSale
+          ? colors.destructive
+          : colors.success;
+
+    const bgIcon = isCredit
+      ? "#fef3c7"
+      : isReturn
+        ? "#e0f2fe"
+        : isSale
+          ? "#fee2e2"
+          : "#dcfce7";
+
+    const iconName = isCredit
+      ? "user"
+      : isReturn
+        ? "rotate-ccw"
+        : isSale
+          ? "arrow-up"
+          : "arrow-down";
+
+    const sign = isPurchase || isReturn ? "+" : "−";
     const isMulti = item.items.length > 1;
+    const canReturn = (isSale || isCredit) && !item.returned;
+    const allReturned =
+      (isSale || isCredit) &&
+      item.items.every((h) => h.returned);
 
     return (
       <View style={[styles.billCard, { backgroundColor: colors.card }]}>
@@ -160,11 +227,7 @@ export default function HistoryScreen() {
           style={[styles.billHeader, rtl && styles.rowReverse]}
         >
           <View style={[styles.typeIcon, { backgroundColor: bgIcon }]}>
-            <Feather
-              name={isCredit ? "user" : isSale ? "arrow-up" : "arrow-down"}
-              size={16}
-              color={typeColor}
-            />
+            <Feather name={iconName as any} size={16} color={typeColor} />
           </View>
           <View style={styles.billInfo}>
             {isCredit && item.personName ? (
@@ -179,6 +242,17 @@ export default function HistoryScreen() {
                 {item.personName}
               </Text>
             ) : null}
+            {isReturn && (
+              <Text
+                style={[
+                  styles.billPerson,
+                  { color: "#0ea5e9" },
+                  rtl && styles.rtlText,
+                ]}
+              >
+                {t("returnType")}
+              </Text>
+            )}
             {isMulti ? (
               <Text
                 style={[
@@ -241,6 +315,13 @@ export default function HistoryScreen() {
                 </Text>
               </View>
             )}
+            {allReturned && (
+              <View style={[styles.paidBadge, { backgroundColor: "#e0f2fe" }]}>
+                <Text style={{ color: "#0369a1", fontSize: 8, fontWeight: "800" }}>
+                  {t("returnBadge")}
+                </Text>
+              </View>
+            )}
             {isMulti && (
               <Feather
                 name={isOpen ? "chevron-up" : "chevron-down"}
@@ -251,6 +332,27 @@ export default function HistoryScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* Return whole bill action (for single or multi-item SALE/CREDIT) */}
+        {canReturn && !allReturned && (
+          <View
+            style={[
+              styles.actionRow,
+              { borderTopColor: colors.border },
+              rtl && styles.rowReverse,
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.returnBtn}
+              onPress={() => handleReturnBill(item)}
+            >
+              <Feather name="rotate-ccw" size={12} color="#0ea5e9" />
+              <Text style={styles.returnBtnText}>
+                {isMulti ? t("returnBill") : t("returnItem")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {isOpen && (
           <View
             style={[
@@ -258,42 +360,63 @@ export default function HistoryScreen() {
               { borderTopColor: colors.border },
             ]}
           >
-            {item.items.map((h) => (
-              <View
-                key={h.id}
-                style={[styles.lineRow, rtl && styles.rowReverse]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.lineName,
-                      { color: colors.foreground },
-                      rtl && styles.rtlText,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {h.name}
-                  </Text>
-                  {(h.unitPrice ?? 0) > 0 && (
-                    <Text
-                      style={[
-                        styles.lineMeta,
-                        { color: colors.mutedForeground },
-                        rtl && styles.rtlText,
-                      ]}
-                    >
-                      {h.qty} × {(h.unitPrice ?? 0).toFixed(2)}
+            {item.items.map((h) => {
+              const canReturnLine =
+                !h.returned && (h.type === "SALE" || h.type === "CREDIT");
+              return (
+                <View
+                  key={h.id}
+                  style={[styles.lineRow, rtl && styles.rowReverse]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={[{ flexDirection: rtl ? "row-reverse" : "row", alignItems: "center", gap: 6 }]}>
+                      <Text
+                        style={[
+                          styles.lineName,
+                          { color: h.returned ? colors.mutedForeground : colors.foreground },
+                          rtl && styles.rtlText,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {h.name}
+                      </Text>
+                      {h.returned && (
+                        <View style={[styles.miniReturnBadge]}>
+                          <Text style={styles.miniReturnText}>{t("returnBadge")}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {(h.unitPrice ?? 0) > 0 && (
+                      <Text
+                        style={[
+                          styles.lineMeta,
+                          { color: colors.mutedForeground },
+                          rtl && styles.rtlText,
+                        ]}
+                      >
+                        {h.qty} × {(h.unitPrice ?? 0).toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={[{ flexDirection: "row", alignItems: "center", gap: 8 }]}>
+                    {canReturnLine && (
+                      <TouchableOpacity
+                        onPress={() => handleReturnEntry(h.id, h.name)}
+                        style={styles.lineReturnBtn}
+                      >
+                        <Feather name="rotate-ccw" size={11} color="#0ea5e9" />
+                      </TouchableOpacity>
+                    )}
+                    <Text style={[styles.lineAmount, { color: typeColor }]}>
+                      {sign}{h.qty}
+                      {(h.amount ?? 0) > 0
+                        ? `  ${(h.amount ?? 0).toFixed(2)}`
+                        : ""}
                     </Text>
-                  )}
+                  </View>
                 </View>
-                <Text style={[styles.lineAmount, { color: typeColor }]}>
-                  {sign}{h.qty}
-                  {(h.amount ?? 0) > 0
-                    ? `  ${(h.amount ?? 0).toFixed(2)}`
-                    : ""}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </View>
@@ -343,6 +466,13 @@ export default function HistoryScreen() {
             color={colors.warning}
             mutedColor={colors.mutedForeground}
           />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SumItem
+            num={totals.returned.toFixed(0)}
+            label={t("returnType")}
+            color="#0ea5e9"
+            mutedColor={colors.mutedForeground}
+          />
           <TouchableOpacity
             style={[styles.csvBtn, { backgroundColor: colors.primary }]}
             onPress={exportCSV}
@@ -366,6 +496,7 @@ export default function HistoryScreen() {
             { key: "SALE", label: t("sale") },
             { key: "PURCHASE", label: t("purchase") },
             { key: "CREDIT", label: t("credit") },
+            { key: "RETURN", label: t("returnType") },
           ] as { key: Filter; label: string }[]
         ).map((tab) => {
           const active = filter === tab.key;
@@ -486,10 +617,10 @@ function SumItem({
 }) {
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
-      <Text style={{ fontSize: 16, fontWeight: "800", color }}>{num}</Text>
+      <Text style={{ fontSize: 14, fontWeight: "800", color }}>{num}</Text>
       <Text
         style={{
-          fontSize: 9,
+          fontSize: 8,
           color: mutedColor,
           textTransform: "uppercase",
           letterSpacing: 0.4,
@@ -519,7 +650,7 @@ function useStyles() {
     summary: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: 4,
     },
     divider: { width: 1, height: 28 },
     csvBtn: {
@@ -541,11 +672,11 @@ function useStyles() {
       borderBottomWidth: 1,
     },
     tab: {
-      paddingHorizontal: 12,
-      paddingVertical: 7,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
       borderRadius: 20,
     },
-    tabText: { fontSize: 11, fontWeight: "700" },
+    tabText: { fontSize: 10, fontWeight: "700" },
 
     searchWrap: {
       flexDirection: "row",
@@ -604,6 +735,28 @@ function useStyles() {
       marginTop: 2,
     },
 
+    actionRow: {
+      borderTopWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    returnBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: "#e0f2fe",
+    },
+    returnBtnText: {
+      color: "#0369a1",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+
     billItems: {
       borderTopWidth: 1,
       paddingHorizontal: 14,
@@ -619,6 +772,25 @@ function useStyles() {
     lineName: { fontSize: 12, fontWeight: "600" },
     lineMeta: { fontSize: 10, marginTop: 1 },
     lineAmount: { fontSize: 12, fontWeight: "700" },
+    lineReturnBtn: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      backgroundColor: "#e0f2fe",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    miniReturnBadge: {
+      backgroundColor: "#e0f2fe",
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 4,
+    },
+    miniReturnText: {
+      color: "#0369a1",
+      fontSize: 8,
+      fontWeight: "800",
+    },
 
     clearBtn: {
       flexDirection: "row",

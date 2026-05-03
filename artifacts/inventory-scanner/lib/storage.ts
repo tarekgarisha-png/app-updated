@@ -73,8 +73,9 @@ export async function commitScanQueue(
   const history = await getHistory(10000);
 
   for (const item of queue) {
-    // SALE and CREDIT both reduce stock; PURCHASE adds.
-    const delta = mode === "PURCHASE" ? item.qty : -item.qty;
+    // SALE/CREDIT reduce stock; PURCHASE/RETURN add stock.
+    const delta =
+      mode === "PURCHASE" || mode === "RETURN" ? item.qty : -item.qty;
     const idx = products.findIndex((p) => p.barcode === item.barcode);
     let unitPrice = item.price;
     if (idx >= 0) {
@@ -84,7 +85,6 @@ export async function commitScanQueue(
       if (!unitPrice) unitPrice = products[idx]!.price;
     }
     const amount = unitPrice * item.qty;
-    const sessionId = batchSessionId;
     const entry: HistoryEntry = {
       id: genId(),
       barcode: item.barcode,
@@ -93,7 +93,7 @@ export async function commitScanQueue(
       qty: item.qty,
       unitPrice,
       amount,
-      sessionId,
+      sessionId: batchSessionId,
       date: now,
     };
     if (mode === "CREDIT") {
@@ -112,7 +112,6 @@ export async function getHistory(limit = 500): Promise<HistoryEntry[]> {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as HistoryEntry[];
-    // Backward-compat: ensure new fields are present.
     const normalized = parsed.map((h) => ({
       ...h,
       unitPrice: typeof h.unitPrice === "number" ? h.unitPrice : 0,
@@ -167,6 +166,93 @@ export async function deleteCreditEntry(entryId: string): Promise<void> {
   await writeHistory(next);
 }
 
+/** Return a bill (session) — creates RETURN entries and restores stock */
+export async function returnBillSession(sessionId: string): Promise<void> {
+  const products = await getAllProducts();
+  const history = await getHistory(10000);
+  const now = new Date().toISOString();
+  const returnSessionId = genId();
+
+  const originals = history.filter(
+    (h) =>
+      (h.sessionId === sessionId || h.id === sessionId.replace("solo:", "")) &&
+      !h.returned &&
+      (h.type === "SALE" || h.type === "CREDIT"),
+  );
+
+  if (!originals.length) return;
+
+  const newEntries: HistoryEntry[] = [];
+
+  for (const orig of originals) {
+    // Restore stock
+    const idx = products.findIndex((p) => p.barcode === orig.barcode);
+    if (idx >= 0) {
+      const updated = { ...products[idx]! };
+      updated.stock = updated.stock + orig.qty;
+      products[idx] = updated;
+    }
+    newEntries.push({
+      id: genId(),
+      barcode: orig.barcode,
+      name: orig.name,
+      type: "RETURN",
+      qty: orig.qty,
+      unitPrice: orig.unitPrice,
+      amount: orig.amount,
+      sessionId: returnSessionId,
+      returnedFrom: orig.id,
+      date: now,
+    });
+  }
+
+  // Mark originals as returned
+  const updatedHistory = history.map((h) =>
+    originals.some((o) => o.id === h.id) ? { ...h, returned: true } : h,
+  );
+
+  await writeProducts(products);
+  await writeHistory([...newEntries, ...updatedHistory]);
+}
+
+/** Return a single history entry */
+export async function returnSingleEntry(entryId: string): Promise<void> {
+  const products = await getAllProducts();
+  const history = await getHistory(10000);
+  const now = new Date().toISOString();
+
+  const orig = history.find((h) => h.id === entryId);
+  if (!orig || orig.returned) return;
+  if (orig.type !== "SALE" && orig.type !== "CREDIT") return;
+
+  const idx = products.findIndex((p) => p.barcode === orig.barcode);
+  if (idx >= 0) {
+    const updated = { ...products[idx]! };
+    updated.stock = updated.stock + orig.qty;
+    products[idx] = updated;
+  }
+
+  const returnEntry: HistoryEntry = {
+    id: genId(),
+    barcode: orig.barcode,
+    name: orig.name,
+    type: "RETURN",
+    qty: orig.qty,
+    unitPrice: orig.unitPrice,
+    amount: orig.amount,
+    returnedFrom: orig.id,
+    sessionId: genId(),
+    date: now,
+  };
+
+  const updatedHistory = history.map((h) =>
+    h.id === entryId ? { ...h, returned: true } : h,
+  );
+
+  await writeProducts(products);
+  await writeHistory([returnEntry, ...updatedHistory]);
+}
+
 export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {
   const sessionMap = new Map<string, BillGroup>();
   const singleKey = (h: HistoryEntry) => `solo:${h.id}`;
@@ -179,6 +265,7 @@ export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {
       existing.totalQty += h.qty;
       existing.items.push(h);
       if (h.paid === false) existing.paid = false;
+      if (!h.returned) existing.returned = false;
     } else {
       sessionMap.set(key, {
         sessionId: key,
@@ -189,6 +276,7 @@ export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {
         totalQty: h.qty,
         items: [h],
         paid: h.type === "CREDIT" ? (h.paid ?? false) : undefined,
+        returned: h.returned ?? false,
       });
     }
   }
@@ -242,9 +330,7 @@ export function buildProductsCSV(products: Product[]): string {
   const rows = products
     .map(
       (p) =>
-        `${csvEscape(p.barcode)},${csvEscape(p.name)},${csvEscape(
-          p.nameAr,
-        )},${p.stock},${p.minStock},${csvEscape(p.unit)},${p.price}`,
+        `${csvEscape(p.barcode)},${csvEscape(p.name)},${csvEscape(p.nameAr)},${p.stock},${p.minStock},${csvEscape(p.unit)},${p.price}`,
     )
     .join("\n");
   return header + rows;
@@ -252,12 +338,24 @@ export function buildProductsCSV(products: Product[]): string {
 
 export function buildHistoryCSV(history: HistoryEntry[]): string {
   const header =
-    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid\n";
+    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid,Returned\n";
   const rows = history
     .map(
       (h) =>
-        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""}`,
+        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""},${h.returned ? "YES" : ""}`,
     )
     .join("\n");
   return header + rows;
+}
+
+export function buildDebtsCSV(history: HistoryEntry[]): string {
+  const debts = summarizeDebts(history);
+  const header = "Person,Total Owed,Item Count,Oldest Date,Items Detail\n";
+  const rows = debts.map((d) => {
+    const detail = d.entries
+      .map((e) => `${e.name}×${e.qty}@${e.unitPrice}`)
+      .join("; ");
+    return `${csvEscape(d.personName)},${d.totalOwed.toFixed(2)},${d.itemCount},${csvEscape(d.oldestDate)},${csvEscape(detail)}`;
+  });
+  return header + rows.join("\n");
 }
