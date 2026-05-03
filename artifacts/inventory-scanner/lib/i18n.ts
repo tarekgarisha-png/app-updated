@@ -94,6 +94,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     deleteAll: "حذف الكل",
     exportCSV: "تصدير CSV",
     shareBill: "مشاركة الفاتورة",
+    printBill: "طباعة فاتورة",
     shareWhatsApp: "مشاركة عبر واتساب",
     shareBillTitle: "مشاركة الفاتورة",
     shareBillFailed: "فشل مشاركة الفاتورة",
@@ -113,6 +114,12 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importDoneTitle: "تم الاستيراد",
     importDoneMsg: (a: number, u: number, s: number) =>
       `تمت إضافة ${a}، تحديث ${u}، وتخطي ${s}.`,
+    returnItem: "ارجاع",
+    returnBill: "ارجاع",
+    returnType: "ارجاع",
+    returnBadge: "ارجاع",
+    returnBillConfirm: (count: number) => `ارجاع ${count} عنصر؟`,
+    returnConfirm: (name: string) => `ارجاع ${name}؟`,
 
     exportTitle: "تصدير البيانات",
     productsExport: "مخزون المنتجات",
@@ -242,6 +249,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     deleteAll: "Delete All",
     exportCSV: "Export CSV",
     shareBill: "Share Bill",
+    printBill: "Print Bill",
     shareWhatsApp: "Share on WhatsApp",
     shareBillTitle: "Share Bill",
     shareBillFailed: "Failed to share bill",
@@ -300,6 +308,12 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     enterPersonName: "Enter customer name",
     personRequired: "Customer name is required",
     cameraHint: "Settings → Apps → Qasoda Market → Permissions",
+    returnItem: "Return Item",
+    returnBill: "Return Bill",
+    returnType: "Return",
+    returnBadge: "Returned",
+    returnBillConfirm: (count: number) => `Return ${count} item(s)?`,
+    returnConfirm: (name: string) => `Return ${name}?`,
   },
 };
 

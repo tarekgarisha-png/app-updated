@@ -32,6 +32,9 @@
     "web": {
       "favicon": "./assets/images/icon.png"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "plugins": [
       [
         "expo-router",

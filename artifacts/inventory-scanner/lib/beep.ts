@@ -53,7 +53,7 @@ async function getNativeBeepSound(): Promise<any | null> {
       allowsRecordingIOS: false,
     });
     if (!soundPath) {
-      const uri = typeof beepAsset === "string" ? beepAsset : beepAsset?.uri;
+      const uri = beepAsset as string;
       if (!uri) return null;
       soundPath = `${FileSystem.cacheDirectory ?? ""}scan-beep.mp3`;
       await FileSystem.copyAsync({ from: uri, to: soundPath });
