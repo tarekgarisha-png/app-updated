@@ -43,10 +43,11 @@ export async function getProductByBarcode(
 export async function saveProduct(product: Product): Promise<void> {
   const products = await getAllProducts();
   const idx = products.findIndex((p) => p.barcode === product.barcode);
+  const withTimestamp: Product = { ...product, updatedAt: new Date().toISOString() };
   if (idx >= 0) {
-    products[idx] = product;
+    products[idx] = withTimestamp;
   } else {
-    products.push(product);
+    products.push(withTimestamp);
   }
   await writeProducts(products);
 }
@@ -68,6 +69,7 @@ export async function commitScanQueue(
   queue: ScanQueueItem[],
   mode: TransactionType,
   personName?: string,
+  shiftId?: number,
 ): Promise<void> {
   const products = await getAllProducts();
   const now = new Date().toISOString();
@@ -82,6 +84,7 @@ export async function commitScanQueue(
     if (idx >= 0) {
       const updated = { ...products[idx]! };
       updated.stock = Math.max(0, updated.stock + delta);
+      updated.updatedAt = now;
       products[idx] = updated;
       if (!unitPrice) unitPrice = products[idx]!.price;
     }
@@ -96,6 +99,7 @@ export async function commitScanQueue(
       amount,
       sessionId: batchSessionId,
       date: now,
+      ...(shiftId !== undefined ? { shiftId } : {}),
     };
     if (mode === "CREDIT") {
       entry.personName = (personName ?? "").trim() || "Unknown";
@@ -190,6 +194,7 @@ export async function returnBillSession(sessionId: string): Promise<void> {
     if (idx >= 0) {
       const updated = { ...products[idx]! };
       updated.stock = updated.stock + orig.qty;
+      updated.updatedAt = now;
       products[idx] = updated;
     }
     newEntries.push({
@@ -228,6 +233,7 @@ export async function returnSingleEntry(entryId: string): Promise<void> {
   if (idx >= 0) {
     const updated = { ...products[idx]! };
     updated.stock = updated.stock + orig.qty;
+    updated.updatedAt = now;
     products[idx] = updated;
   }
 
@@ -390,11 +396,11 @@ export function buildProductsCSV(products: Product[]): string {
 
 export function buildHistoryCSV(history: HistoryEntry[]): string {
   const header =
-    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid,Returned\n";
+    "ID,Date,Type,Barcode,Name,Qty,Unit Price,Amount,Person,Paid,Returned,Shift\n";
   const rows = history
     .map(
       (h) =>
-        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""},${h.returned ? "YES" : ""}`,
+        `${csvEscape(h.id)},${csvEscape(h.date)},${csvEscape(h.type)},${csvEscape(h.barcode)},${csvEscape(h.name)},${h.qty},${h.unitPrice ?? 0},${h.amount ?? 0},${csvEscape(h.personName ?? "")},${h.type === "CREDIT" ? (h.paid ? "PAID" : "UNPAID") : ""},${h.returned ? "YES" : ""},${h.shiftId ?? ""}`,
     )
     .join("\n");
   return header + rows;

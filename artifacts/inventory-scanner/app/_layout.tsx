@@ -14,7 +14,9 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ShiftLockScreen } from "@/components/ShiftLockScreen";
 import { InventoryProvider } from "@/contexts/InventoryContext";
+import { ShiftProvider, useShift } from "@/contexts/ShiftContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -49,6 +51,12 @@ function RootLayoutNav() {
   );
 }
 
+function AppContent() {
+  const { isLocked } = useShift();
+  if (isLocked) return <ShiftLockScreen />;
+  return <RootLayoutNav />;
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -72,7 +80,9 @@ export default function RootLayout() {
           <GestureHandlerRootView>
             <KeyboardProvider>
               <InventoryProvider>
-                <RootLayoutNav />
+                <ShiftProvider>
+                  <AppContent />
+                </ShiftProvider>
               </InventoryProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

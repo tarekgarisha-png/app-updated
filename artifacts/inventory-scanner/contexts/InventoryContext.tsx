@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -24,6 +25,14 @@ import {
   returnSingleEntry as returnSingleEntryStorage,
   saveProduct as saveProductStorage,
 } from "@/lib/storage";
+import {
+  getLastSynced,
+  getSyncUrl,
+  pushAndPull,
+  saveLastSynced,
+  saveSyncUrl,
+  type SyncStatus,
+} from "@/lib/sync";
 import type {
   HistoryEntry,
   PartialPayment,
@@ -46,6 +55,7 @@ type InventoryContextValue = {
     queue: ScanQueueItem[],
     mode: TransactionType,
     personName?: string,
+    shiftId?: number,
   ) => Promise<void>;
   clearAllHistory: () => Promise<void>;
   markEntryPaid: (entryId: string, paid: boolean) => Promise<void>;
@@ -54,11 +64,19 @@ type InventoryContextValue = {
   returnBill: (sessionId: string) => Promise<void>;
   returnEntry: (entryId: string) => Promise<void>;
   addPartialPayment: (personName: string, amount: number, note?: string) => Promise<void>;
+  syncUrl: string;
+  syncStatus: SyncStatus;
+  lastSynced: string | null;
+  syncNow: () => Promise<void>;
+  setSyncUrl: (url: string) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 const LANG_KEY = "inventory:lang:v1";
+const PRODUCTS_KEY = "inventory:products:v1";
+const HISTORY_KEY = "inventory:history:v1";
+const PAYMENTS_KEY = "inventory:partial_payments:v1";
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -66,6 +84,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [partialPayments, setPartialPayments] = useState<PartialPayment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lang, setLangState] = useState<Lang>("en");
+  const [syncUrl, setSyncUrlState] = useState<string>("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const [p, h, pp] = await Promise.all([
@@ -81,10 +102,16 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const storedLang = await AsyncStorage.getItem(LANG_KEY);
+        const [storedLang, storedSyncUrl, storedLastSynced] = await Promise.all([
+          AsyncStorage.getItem(LANG_KEY),
+          getSyncUrl(),
+          getLastSynced(),
+        ]);
         if (storedLang === "ar" || storedLang === "en") {
           setLangState(storedLang);
         }
+        setSyncUrlState(storedSyncUrl);
+        setLastSynced(storedLastSynced);
         await refresh();
       } finally {
         setLoading(false);
@@ -97,10 +124,60 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
   }, []);
 
+  // ─── Sync ──────────────────────────────────────────────────────────────────
+
+  const syncNow = useCallback(async () => {
+    const url = syncUrl;
+    if (!url) {
+      setSyncStatus("off");
+      return;
+    }
+    setSyncStatus("syncing");
+    try {
+      const [prods, hist, payments] = await Promise.all([
+        getAllProducts(),
+        getHistory(10000),
+        getPartialPayments(),
+      ]);
+      const merged = await pushAndPull(url, {
+        products: prods,
+        history: hist,
+        partialPayments: payments,
+      });
+      await Promise.all([
+        AsyncStorage.setItem(PRODUCTS_KEY, JSON.stringify(merged.products)),
+        AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(merged.history)),
+        AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(merged.partialPayments)),
+      ]);
+      await refresh();
+      const now = new Date().toISOString();
+      setLastSynced(now);
+      await saveLastSynced(now);
+      setSyncStatus("ok");
+    } catch {
+      setSyncStatus("error");
+    }
+  }, [syncUrl, refresh]);
+
+  // Keep a ref so commitQueue can fire sync without capturing stale closures
+  const syncNowRef = useRef(syncNow);
+  useEffect(() => {
+    syncNowRef.current = syncNow;
+  }, [syncNow]);
+
+  const setSyncUrl = useCallback(async (url: string) => {
+    setSyncUrlState(url);
+    await saveSyncUrl(url);
+    setSyncStatus("idle");
+  }, []);
+
+  // ─── Data mutations ────────────────────────────────────────────────────────
+
   const saveProduct = useCallback(
     async (p: Product) => {
       await saveProductStorage(p);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -114,9 +191,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const commitQueue = useCallback(
-    async (queue: ScanQueueItem[], mode: TransactionType, personName?: string) => {
-      await commitScanQueue(queue, mode, personName);
+    async (queue: ScanQueueItem[], mode: TransactionType, personName?: string, shiftId?: number) => {
+      await commitScanQueue(queue, mode, personName, shiftId);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -130,6 +208,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (entryId: string, paid: boolean) => {
       await markCreditEntryPaidStorage(entryId, paid);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -138,6 +217,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (personName: string) => {
       await markPersonDebtsPaidStorage(personName);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -154,6 +234,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (sessionId: string) => {
       await returnBillSessionStorage(sessionId);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -162,6 +243,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (entryId: string) => {
       await returnSingleEntryStorage(entryId);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -170,6 +252,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     async (personName: string, amount: number, note?: string) => {
       await addPartialPaymentStorage(personName, amount, note);
       await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
     [refresh],
   );
@@ -193,6 +276,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       returnBill,
       returnEntry,
       addPartialPayment,
+      syncUrl,
+      syncStatus,
+      lastSynced,
+      syncNow,
+      setSyncUrl,
     }),
     [
       products,
@@ -212,6 +300,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       returnBill,
       returnEntry,
       addPartialPayment,
+      syncUrl,
+      syncStatus,
+      lastSynced,
+      syncNow,
+      setSyncUrl,
     ],
   );
 
