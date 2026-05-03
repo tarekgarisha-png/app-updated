@@ -155,6 +155,17 @@ export async function pickAndReadCSV(): Promise<string | null> {
   return text;
 }
 
+export async function shareTextFile(
+  content: string,
+  filename: string,
+): Promise<string> {
+  const path = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ""}${filename}`;
+  await FileSystem.writeAsStringAsync(path, content, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  return path;
+}
+
 function pickAndReadCSVWeb(): Promise<string | null> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") {
