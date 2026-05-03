@@ -54,6 +54,8 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.NEARBY_WIFI_DEVICES",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
