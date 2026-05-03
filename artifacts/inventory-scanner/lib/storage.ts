@@ -4,6 +4,7 @@ import type {
   BillGroup,
   DebtSummary,
   HistoryEntry,
+  PartialPayment,
   Product,
   ScanQueueItem,
   TransactionType,
@@ -11,6 +12,7 @@ import type {
 
 const PRODUCTS_KEY = "inventory:products:v1";
 const HISTORY_KEY = "inventory:history:v1";
+const PAYMENTS_KEY = "inventory:partial_payments:v1";
 
 function genId(): string {
   return Date.now().toString() + Math.random().toString(36).substring(2, 9);
@@ -73,7 +75,6 @@ export async function commitScanQueue(
   const history = await getHistory(10000);
 
   for (const item of queue) {
-    // SALE/CREDIT reduce stock; PURCHASE/RETURN add stock.
     const delta =
       mode === "PURCHASE" || mode === "RETURN" ? item.qty : -item.qty;
     const idx = products.findIndex((p) => p.barcode === item.barcode);
@@ -185,7 +186,6 @@ export async function returnBillSession(sessionId: string): Promise<void> {
   const newEntries: HistoryEntry[] = [];
 
   for (const orig of originals) {
-    // Restore stock
     const idx = products.findIndex((p) => p.barcode === orig.barcode);
     if (idx >= 0) {
       const updated = { ...products[idx]! };
@@ -206,7 +206,6 @@ export async function returnBillSession(sessionId: string): Promise<void> {
     });
   }
 
-  // Mark originals as returned
   const updatedHistory = history.map((h) =>
     originals.some((o) => o.id === h.id) ? { ...h, returned: true } : h,
   );
@@ -253,6 +252,37 @@ export async function returnSingleEntry(entryId: string): Promise<void> {
   await writeHistory([returnEntry, ...updatedHistory]);
 }
 
+// ─── Partial Payments ────────────────────────────────────────────────────────
+
+export async function getPartialPayments(): Promise<PartialPayment[]> {
+  const raw = await AsyncStorage.getItem(PAYMENTS_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as PartialPayment[];
+  } catch {
+    return [];
+  }
+}
+
+export async function addPartialPayment(
+  personName: string,
+  amount: number,
+  note?: string,
+): Promise<void> {
+  const payments = await getPartialPayments();
+  const payment: PartialPayment = {
+    id: genId(),
+    personName: personName.trim(),
+    amount,
+    note,
+    date: new Date().toISOString(),
+  };
+  payments.unshift(payment);
+  await AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments));
+}
+
+// ─── Grouping ─────────────────────────────────────────────────────────────────
+
 export function groupHistoryIntoBills(history: HistoryEntry[]): BillGroup[] {
   const sessionMap = new Map<string, BillGroup>();
   const singleKey = (h: HistoryEntry) => `solo:${h.id}`;
@@ -292,7 +322,10 @@ export function generateAutoBarcode(): string {
   return `#${ts}${rand}`;
 }
 
-export function summarizeDebts(history: HistoryEntry[]): DebtSummary[] {
+export function summarizeDebts(
+  history: HistoryEntry[],
+  partialPayments: PartialPayment[] = [],
+): DebtSummary[] {
   const map = new Map<string, DebtSummary>();
   for (const h of history) {
     if (h.type !== "CREDIT") continue;
@@ -308,16 +341,35 @@ export function summarizeDebts(history: HistoryEntry[]): DebtSummary[] {
       map.set(key, {
         personName: key,
         totalOwed: h.amount,
+        remainingOwed: 0,
         itemCount: h.qty,
         entries: [h],
         oldestDate: h.date,
+        partialPayments: [],
       });
     }
   }
-  return Array.from(map.values()).sort(
-    (a, b) => b.totalOwed - a.totalOwed,
-  );
+
+  for (const p of partialPayments) {
+    const key = p.personName.trim() || "Unknown";
+    const cur = map.get(key);
+    if (cur) {
+      cur.partialPayments.push(p);
+    }
+  }
+
+  const result = Array.from(map.values()).map((d) => ({
+    ...d,
+    remainingOwed: Math.max(
+      0,
+      d.totalOwed - d.partialPayments.reduce((s, p) => s + p.amount, 0),
+    ),
+  }));
+
+  return result.sort((a, b) => b.remainingOwed - a.remainingOwed);
 }
+
+// ─── CSV Builders ─────────────────────────────────────────────────────────────
 
 function csvEscape(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
@@ -350,12 +402,13 @@ export function buildHistoryCSV(history: HistoryEntry[]): string {
 
 export function buildDebtsCSV(history: HistoryEntry[]): string {
   const debts = summarizeDebts(history);
-  const header = "Person,Total Owed,Item Count,Oldest Date,Items Detail\n";
+  const header = "Person,Total Owed,Partial Paid,Remaining,Item Count,Oldest Date,Items Detail\n";
   const rows = debts.map((d) => {
+    const partialPaid = d.partialPayments.reduce((s, p) => s + p.amount, 0);
     const detail = d.entries
       .map((e) => `${e.name}×${e.qty}@${e.unitPrice}`)
       .join("; ");
-    return `${csvEscape(d.personName)},${d.totalOwed.toFixed(2)},${d.itemCount},${csvEscape(d.oldestDate)},${csvEscape(detail)}`;
+    return `${csvEscape(d.personName)},${d.totalOwed.toFixed(2)},${partialPaid.toFixed(2)},${d.remainingOwed.toFixed(2)},${d.itemCount},${csvEscape(d.oldestDate)},${csvEscape(detail)}`;
   });
   return header + rows.join("\n");
 }

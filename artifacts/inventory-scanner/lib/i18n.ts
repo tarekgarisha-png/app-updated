@@ -158,7 +158,6 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     generateId: "توليد رقم تلقائي",
     autoIdHint: "سيُستخدم رقم تعريف تلقائي كباركود",
     addByName: "إضافة بحثًا عن الاسم",
-    searchProducts: "ابحث في المنتجات...",
 
     bill: "فاتورة",
     billItems: (n: number) => `${n} صنف`,
@@ -193,6 +192,23 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     exportHistoryDesc: (n: number) => `${n} معاملة`,
     exportDebtsDesc: (n: number) => `${n} شخص مدين`,
     exportSharing: "مشاركة",
+
+    partialPayTitle: "دفع مبلغ جزئي",
+    partialPayLabel: "المبلغ المدفوع",
+    partialPayPlaceholder: "مثال: 5.50",
+    partialPayNote: "ملاحظة (اختياري)",
+    partialPayNotePlaceholder: "مثال: دفع نقدي",
+    partialPayConfirm: "تطبيق الدفعة",
+    partialPaySuccess: "تم تسجيل الدفعة",
+    partialPayInvalid: "أدخل مبلغاً صحيحاً",
+    payAmount: "دفع مبلغ",
+    totalOwedLabel: "المجموع الكلي",
+    totalPaid: "المدفوع",
+    remaining: "المتبقي",
+    partialHistory: "سجل الدفعات",
+
+    printBill: "طباعة",
+    printError: "فشل في الطباعة",
   },
 
   en: {
@@ -350,7 +366,6 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     generateId: "Generate Auto ID",
     autoIdHint: "An auto-generated ID will be used as the barcode",
     addByName: "Add by Name",
-    searchProducts: "Search products...",
 
     bill: "Bill",
     billItems: (n: number) => `${n} item(s)`,
@@ -385,6 +400,23 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     exportHistoryDesc: (n: number) => `${n} transaction(s)`,
     exportDebtsDesc: (n: number) => `${n} person(s) owing`,
     exportSharing: "Share",
+
+    partialPayTitle: "Record Partial Payment",
+    partialPayLabel: "Amount Paid",
+    partialPayPlaceholder: "e.g. 5.50",
+    partialPayNote: "Note (optional)",
+    partialPayNotePlaceholder: "e.g. Cash payment",
+    partialPayConfirm: "Apply Payment",
+    partialPaySuccess: "Payment recorded",
+    partialPayInvalid: "Enter a valid amount",
+    payAmount: "Pay Amount",
+    totalOwedLabel: "Total Owed",
+    totalPaid: "Paid",
+    remaining: "Remaining",
+    partialHistory: "Payment History",
+
+    printBill: "Print",
+    printError: "Print failed",
   },
 };
 

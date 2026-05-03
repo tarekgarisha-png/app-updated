@@ -27,14 +27,14 @@ import {
 export default function SettingsScreen() {
   const colors = useColors();
   const { t, rtl, lang } = useT();
-  const { setLang, products, history } = useInventory();
+  const { setLang, products, history, partialPayments } = useInventory();
   const insets = useSafeAreaInsets();
 
   const [exporting, setExporting] = useState<string | null>(null);
 
   const headerTopPadding = Platform.OS === "web" ? 24 : insets.top + 8;
 
-  const debtCount = summarizeDebts(history).length;
+  const debtCount = summarizeDebts(history, partialPayments).length;
 
   const shareCSV = async (csv: string, filename: string, title: string) => {
     if (Platform.OS === "web") {
