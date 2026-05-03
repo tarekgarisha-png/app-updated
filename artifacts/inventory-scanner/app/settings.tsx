@@ -365,11 +365,11 @@ export default function SettingsScreen() {
             icon="upload"
             iconColor={colors.primary}
             iconBg="#eff6ff"
-            label={t("importProducts")}
-            desc={t("importInstructions").split(".")[0]}
+            label={t("bulkAddProducts")}
+            desc={t("bulkAddProductsDesc")}
             rtl={rtl}
             colors={colors}
-            onPress={() => router.push("/import-csv" as any)}
+            onPress={() => router.push("/bulk-add" as any)}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <ActionRow
