@@ -40,8 +40,7 @@ export default function ImportCSVScreen() {
 
   const readRemoteCSV = async () => {
     if (!syncUrl) throw new Error(t("syncOff"));
-    const remote = await fetchText(syncUrl, "/export/products.csv");
-    return remote;
+    return await fetchText(syncUrl, "/export/products.csv");
   };
 
   const handlePickFile = async () => {
@@ -52,17 +51,16 @@ export default function ImportCSVScreen() {
           const remote = await readRemoteCSV();
           const parsedRemote = parseProductsCSV(remote);
           if (parsedRemote.headerMissing) {
-            Alert.alert("\", t("importHeaderError"));
+            Alert.alert("", t("importHeaderError"));
             return;
           }
           if (parsedRemote.rows.length === 0) {
-            Alert.alert("\", t("importNoRows"));
+            Alert.alert("", t("importNoRows"));
             return;
           }
           setRows(parsedRemote.rows);
           setErrors(parsedRemote.errors);
           setStep("preview");
-          return;
         }
         return;
       }
@@ -211,7 +209,9 @@ export default function ImportCSVScreen() {
             onPress={handlePickFile}
           >
             <Feather name="upload" size={18} color="white" />
-            <Text style={styles.primaryBtnText}>{syncUrl ? t("importPickFile") + " / الإنترنت" : t("importPickFile")}</Text>
+            <Text style={styles.primaryBtnText}>
+              {syncUrl ? `${t("importPickFile")} / الإنترنت` : t("importPickFile")}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -239,7 +239,7 @@ export default function ImportCSVScreen() {
               { backgroundColor: "#dbeafe", borderColor: "#93c5fd" },
             ]}
           >
-            <Text style={[styles.previewText, { color: "#1e40af" }]}> 
+            <Text style={[styles.previewText, { color: "#1e40af" }]}>
               {t("importPreview", rows.length)}
             </Text>
             {errors.length > 0 && (
