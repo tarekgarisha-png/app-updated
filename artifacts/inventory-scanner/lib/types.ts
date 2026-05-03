@@ -2,6 +2,7 @@ export type Product = {
   barcode: string;
   name: string;
   nameAr: string;
+  category?: string;
   stock: number;
   minStock: number;
   unit: string;

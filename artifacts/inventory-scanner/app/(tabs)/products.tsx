@@ -26,6 +26,7 @@ export default function ProductsScreen() {
 
   const [search, setSearch] = useState<string>("");
   const [showLow, setShowLow] = useState<boolean>(false);
+  const [category, setCategory] = useState<string>("ALL");
 
   useEffect(() => {
     if (params.lowOnly === "1") {
@@ -46,8 +47,16 @@ export default function ProductsScreen() {
           p.barcode.includes(q),
       );
     }
+    if (category !== "ALL") {
+      list = list.filter((p) => (p.category ?? "").toLowerCase() === category.toLowerCase());
+    }
     return list;
-  }, [products, search, showLow]);
+  }, [products, search, showLow, category]);
+
+  const categories = useMemo(() => {
+    const values = Array.from(new Set(products.map((p) => (p.category ?? "").trim()).filter(Boolean)));
+    return ["ALL", ...values.sort((a, b) => a.localeCompare(b))];
+  }, [products]);
 
   const dotColor = (p: Product): string => {
     if (p.stock === 0) return colors.destructive;
@@ -161,6 +170,18 @@ export default function ProductsScreen() {
             styles.iconBtn,
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
+          onPress={() => {
+            const next = categories[(categories.indexOf(category) + 1) % categories.length] ?? "ALL";
+            setCategory(next);
+          }}
+        >
+          <Feather name="filter" size={18} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.iconBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
           onPress={() => router.push("/import-csv")}
         >
           <Feather name="upload" size={18} color={colors.primary} />
@@ -186,6 +207,20 @@ export default function ProductsScreen() {
             {t("lowOnly")}
           </Text>
           <TouchableOpacity onPress={() => setShowLow(false)}>
+            <Text style={[styles.filterClear, { color: colors.primary }]}>
+              {t("showAll")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {category !== "ALL" && (
+        <View style={[styles.filterBanner, { backgroundColor: "#e0f2fe" }, rtl && styles.rowReverse]}>
+          <Feather name="tag" size={14} color="#0369a1" />
+          <Text style={[styles.filterText, { color: "#0369a1" }, rtl && styles.rtlText]}>
+            {category}
+          </Text>
+          <TouchableOpacity onPress={() => setCategory("ALL")}>
             <Text style={[styles.filterClear, { color: colors.primary }]}>
               {t("showAll")}
             </Text>

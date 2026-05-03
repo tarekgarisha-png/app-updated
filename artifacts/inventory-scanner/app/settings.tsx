@@ -22,6 +22,7 @@ import { useColors } from "@/hooks/useColors";
 import {
   buildDebtsCSV,
   buildDebtsPdfHtml,
+  buildBackupBundle,
   buildHistoryCSV,
   buildHistoryPdfHtml,
   buildProductsCSV,
@@ -145,16 +146,7 @@ export default function SettingsScreen() {
           t("exportDebts"),
         );
       } else if (type === "all") {
-        const lines: string[] = [];
-        lines.push("=== PRODUCTS ===");
-        lines.push(buildProductsCSV(products));
-        lines.push("");
-        lines.push("=== HISTORY ===");
-        lines.push(buildHistoryCSV(history));
-        lines.push("");
-        lines.push("=== DEBTS ===");
-        lines.push(buildDebtsCSV(history));
-        const combined = lines.join("\n");
+        const combined = buildBackupBundle(products, history, partialPayments);
         await shareCSV(combined, `inventory_export_${Date.now()}.csv`, t("exportAll"));
       }
     } catch {
@@ -480,6 +472,17 @@ export default function SettingsScreen() {
             colors={colors}
             loading={exporting === "all"}
             bold
+            onPress={() => handleExport("all")}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ActionRow
+            icon="download"
+            iconColor="#0ea5e9"
+            iconBg="#e0f2fe"
+            label={t("backupBundle")}
+            desc={t("backupBundleDesc")}
+            rtl={rtl}
+            colors={colors}
             onPress={() => handleExport("all")}
           />
         </View>
