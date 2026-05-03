@@ -50,11 +50,18 @@ export default function ProductsScreen() {
     if (category !== "ALL") {
       list = list.filter((p) => (p.category ?? "").toLowerCase() === category.toLowerCase());
     }
-    return list;
+    return [...list].sort((a, b) => {
+      const catA = (a.category ?? "").trim().toLowerCase();
+      const catB = (b.category ?? "").trim().toLowerCase();
+      if (catA !== catB) return catA.localeCompare(catB);
+      return a.name.localeCompare(b.name);
+    });
   }, [products, search, showLow, category]);
 
   const categories = useMemo(() => {
-    const values = Array.from(new Set(products.map((p) => (p.category ?? "").trim()).filter(Boolean)));
+    const values = Array.from(
+      new Set(products.map((p) => (p.category ?? "").trim()).filter(Boolean)),
+    );
     return ["ALL", ...values.sort((a, b) => a.localeCompare(b))];
   }, [products]);
 
