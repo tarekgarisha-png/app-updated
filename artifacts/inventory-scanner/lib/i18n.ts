@@ -175,6 +175,8 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importChooseFile: "اختر ملف CSV",
     importPickFile: "اختر ملف",
     importDownloadSample: "تنزيل ملف عينة",
+    backupBundle: "نسخة احتياطية",
+    backupBundleDesc: "تصدير المنتجات والسجل والديون والدفعات الجزئية.",
     importInstructions:
       "يجب أن يحتوي ملف CSV على الأعمدة التالية: Barcode (مطلوب)، Name (مطلوب)، Arabic Name، Stock، Min Stock، Unit، Price.",
     personName: "اسم العميل",
@@ -377,6 +379,8 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     importChooseFile: "Choose CSV File",
     importPickFile: "Choose File",
     importDownloadSample: "Download Sample File",
+    backupBundle: "Backup Bundle",
+    backupBundleDesc: "Export products, history, debts, and partial payments.",
     importInstructions:
       "CSV must contain these columns: Barcode (required), Name (required), Arabic Name, Stock, Min Stock, Unit, Price.",
     personName: "Customer Name",

@@ -107,6 +107,11 @@ export default function DebtsScreen() {
     }
   };
 
+  const dueSoon = useMemo(
+    () => debts.filter((d) => d.remainingOwed > 0).slice(0, 3),
+    [debts],
+  );
+
   const headerTopPadding = Platform.OS === "web" ? 67 : insets.top + 8;
   const styles = useStyles();
 
@@ -154,6 +159,18 @@ export default function DebtsScreen() {
           </Text>
         </View>
       ) : (
+        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+          {dueSoon.length > 0 && (
+            <View style={[styles.reminderCard, { backgroundColor: "#fef3c7" }]}>
+              <Feather name="bell" size={14} color="#b45309" />
+              <Text style={[styles.reminderText, rtl && styles.rtlText]}>
+                {rtl ? "تذكير: " : "Reminder: "}
+                {dueSoon.map((d) => d.personName).join(", ")}
+              </Text>
+            </View>
+          )}
+        </View>
+        <
         <FlatList
           data={debts}
           keyExtractor={(d) => d.personName}
@@ -182,9 +199,11 @@ export default function DebtsScreen() {
                       {t("items_n", item.itemCount)} · {t("sinceDate", fmtDate(item.oldestDate))}
                     </Text>
                     {hasPartialPayments && (
-                      <Text style={[styles.debtPaidNote, rtl && styles.rtlText]}>
-                        {t("totalPaid")}: {totalPartialPaid.toFixed(2)}
-                      </Text>
+                      <View style={styles.partialPaidBadge}>
+                        <Text style={styles.partialPaidBadgeText}>
+                          {t("partialHistory")}
+                        </Text>
+                      </View>
                     )}
                   </View>
                   <View style={styles.debtRight}>
@@ -378,6 +397,10 @@ function useStyles() {
     debtName: { fontSize: 15, fontWeight: "700" },
     debtMeta: { fontSize: 11, marginTop: 2 },
     debtPaidNote: { fontSize: 10, color: "#16a34a", marginTop: 2, fontWeight: "600" },
+    reminderCard: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, marginBottom: 10 },
+    reminderText: { flex: 1, fontSize: 12, fontWeight: "600", color: "#b45309" },
+    partialPaidBadge: { marginTop: 4, alignSelf: "flex-start", backgroundColor: "#dcfce7", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+    partialPaidBadgeText: { fontSize: 9, fontWeight: "800", color: "#166534" },
     debtRight: { alignItems: "flex-end", gap: 2 },
     debtAmount: { fontSize: 17, fontWeight: "800" },
     debtOriginal: { fontSize: 11, textDecorationLine: "line-through" },

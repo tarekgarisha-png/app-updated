@@ -54,10 +54,10 @@ export async function saveProduct(product: Product): Promise<void> {
 
 export function buildProductsCSV(products: Product[]): string {
   return [
-    "Barcode,Name,Arabic Name,Stock,Min Stock,Unit,Price",
+    "Barcode,Name,Arabic Name,Category,Stock,Min Stock,Unit,Price",
     ...products.map(
       (p) =>
-        `"${p.barcode}","${p.name}","${p.nameAr}",${p.stock},${p.minStock},"${p.unit}",${p.price.toFixed(2)}`,
+        `"${p.barcode}","${p.name}","${p.nameAr}","${p.category ?? ""}",${p.stock},${p.minStock},"${p.unit}",${p.price.toFixed(2)}`,
     ),
   ].join("\n");
 }
@@ -79,6 +79,29 @@ export function buildDebtsCSV(history: HistoryEntry[]): string {
     ...debts.map(
       (d) =>
         `"${d.personName}",${d.itemCount},${d.totalOwed.toFixed(2)},${d.partialPaid.toFixed(2)},${d.remainingOwed.toFixed(2)},"${d.oldestDate}"`,
+    ),
+  ].join("\n");
+}
+
+export function buildBackupBundle(
+  products: Product[],
+  history: HistoryEntry[],
+  partialPayments: PartialPayment[],
+): string {
+  return [
+    "=== PRODUCTS ===",
+    buildProductsCSV(products),
+    "",
+    "=== HISTORY ===",
+    buildHistoryCSV(history),
+    "",
+    "=== DEBTS ===",
+    buildDebtsCSV(history),
+    "",
+    "=== PARTIAL PAYMENTS ===",
+    "ID,Customer,Amount,Date,Note",
+    ...partialPayments.map(
+      (p) => `"${p.id}","${p.personName}",${p.amount.toFixed(2)},"${p.date}","${p.note ?? ""}"`,
     ),
   ].join("\n");
 }
