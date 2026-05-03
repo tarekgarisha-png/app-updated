@@ -18,7 +18,29 @@
       "bundleIdentifier": "com.replit.inventoryscanner",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan product barcodes.",
-        "NSPhotoLibraryUsageDescription": "This app saves CSV exports to your device."
+        "NSPhotoLibraryUsageDescription": "This app saves CSV exports to your device.",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "CSV File",
+            "CFBundleTypeRole": "Viewer",
+            "LSItemContentTypes": [
+              "public.comma-separated-values-text",
+              "public.plain-text",
+              "public.text"
+            ]
+          }
+        ],
+        "UTImportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "public.comma-separated-values-text",
+            "UTTypeDescription": "CSV File",
+            "UTTypeConformsTo": ["public.plain-text"],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": ["csv"],
+              "public.mime-type": ["text/csv", "text/comma-separated-values"]
+            }
+          }
+        ]
       }
     },
     "android": {
@@ -26,7 +48,32 @@
       "permissions": [
         "CAMERA",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
+      "intentFilters": [
+        {
+          "action": "android.intent.action.VIEW",
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ],
+          "data": [
+            { "mimeType": "text/csv" },
+            { "mimeType": "text/comma-separated-values" },
+            { "mimeType": "text/plain" },
+            { "mimeType": "application/vnd.ms-excel" }
+          ]
+        },
+        {
+          "action": "android.intent.action.SEND",
+          "category": ["android.intent.category.DEFAULT"],
+          "data": [
+            { "mimeType": "text/csv" },
+            { "mimeType": "text/comma-separated-values" },
+            { "mimeType": "text/plain" }
+          ]
+        }
       ]
     },
     "web": {

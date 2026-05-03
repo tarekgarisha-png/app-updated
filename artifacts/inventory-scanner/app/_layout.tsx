@@ -6,7 +6,8 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import * as Linking from "expo-linking";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,7 +23,33 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function isIncomingFileUrl(url: string): boolean {
+  return (
+    url.startsWith("file://") ||
+    url.startsWith("content://") ||
+    (url.includes(".csv") && !url.startsWith("inventory-scanner://"))
+  );
+}
+
 function RootLayoutNav() {
+  useEffect(() => {
+    const handleUrl = (url: string) => {
+      if (isIncomingFileUrl(url)) {
+        router.push({
+          pathname: "/import-csv",
+          params: { sharedUri: url },
+        });
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+
+    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, []);
+
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
