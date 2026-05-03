@@ -39,7 +39,8 @@ export async function pushAndPull(
   local: SyncPayload,
 ): Promise<SyncPayload> {
   if (!serverUrl) throw new Error("noSyncUrl");
-  const url = `${serverUrl.replace(/\/+$/, "")}/sync`;
+  const base = serverUrl.replace(/\/+$/, "");
+  const url = base.endsWith("/api") ? `${base}/sync` : `${base}/api/sync`;
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

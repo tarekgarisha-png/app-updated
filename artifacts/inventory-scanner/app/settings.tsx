@@ -149,8 +149,8 @@ export default function SettingsScreen() {
         const combined = buildBackupBundle(products, history, partialPayments);
         await shareCSV(combined, `inventory_export_${Date.now()}.csv`, t("exportAll"));
       }
-    } catch {
-      Alert.alert(t("exportFailed"), "");
+    } catch (err) {
+      Alert.alert(t("exportFailed"), err instanceof Error ? err.message : "");
     } finally {
       setExporting(null);
     }

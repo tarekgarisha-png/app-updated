@@ -229,6 +229,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     syncSuccess: "تمت المزامنة",
     syncError: "فشلت المزامنة",
     syncOff: "المزامنة متوقفة (لا يوجد رابط)",
+    syncErrorDetail: "تعذر الاتصال بالخادم، تأكد أن الرابط ينتهي بـ /api",
     lastSynced: (t: string) => `آخر مزامنة: ${t}`,
   },
   en: {
@@ -464,6 +465,7 @@ const strings: Record<Lang, Record<string, StringValue>> = {
     syncSuccess: "Synced successfully",
     syncError: "Sync failed",
     syncOff: "Sync off — no server URL set",
+    syncErrorDetail: "Could not reach the server. Make sure the URL ends with /api",
     lastSynced: (ts: string) => `Last synced: ${ts}`,
   },
 };
