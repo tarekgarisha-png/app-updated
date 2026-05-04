@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 
-// NEW: Native libraries for mobile features
+// NEW: These libraries must be installed in your Shell first
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -75,7 +75,7 @@ type InventoryContextValue = {
   lastSynced: string | null;
   syncNow: () => Promise<void>;
   setSyncUrl: (url: string) => Promise<void>;
-  // NEW: Function Types
+  // NEW: Added these to the type definition
   exportToPDF: (title: string, data: any[]) => Promise<void>;
   exportToCSV: () => Promise<void>;
   importFromCSV: () => Promise<void>;
@@ -129,62 +129,47 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [refresh]);
 
-  // NEW: PDF Export Logic
+  // NEW: PDF Export Function
   const exportToPDF = useCallback(async (title: string, data: any[]) => {
-    const html = `
-      <html>
-        <body style="font-family: sans-serif; padding: 20px;">
-          <h1 style="text-align: center;">${title}</h1>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-            <tr style="background-color: #f2f2f2;">
-              <th style="border: 1px solid #ddd; padding: 8px;">Item</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Details</th>
-            </tr>
-            ${data.map(item => `
-              <tr>
-                <td style="border: 1px solid #ddd; padding: 8px;">${item.name || 'N/A'}</td>
-                <td style="border: 1px solid #ddd; padding: 8px;">${item.price || item.amount || 0}</td>
-              </tr>
-            `).join('')}
-          </table>
-        </body>
-      </html>
-    `;
-    const { uri } = await Print.printToFileAsync({ html });
-    await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    try {
+      const html = `<html><body style="padding:20px;"><h1>${title}</h1><ul>${data.map(d => `<li>${d.name || 'Item'}: ${d.price || d.amount || 0}</li>`).join('')}</ul></body></html>`;
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
+    } catch (e) {
+      console.error("PDF Export Error", e);
+    }
   }, []);
 
-  // NEW: CSV Export Logic
+  // NEW: CSV Export Function
   const exportToCSV = useCallback(async () => {
-    let csv = "Name,Barcode,Price,Stock\n";
-    products.forEach(p => {
-      csv += `${p.name},${p.barcode},${p.price},${p.stock}\n`;
-    });
-    const fileUri = FileSystem.documentDirectory + "inventory_backup.csv";
-    await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-    await Sharing.shareAsync(fileUri);
+    try {
+      let csv = "Name,Barcode,Price,Stock\n";
+      products.forEach(p => { csv += `${p.name},${p.barcode},${p.price},${p.stock}\n`; });
+      const fileUri = FileSystem.documentDirectory + "inventory.csv";
+      await FileSystem.writeAsStringAsync(fileUri, csv);
+      await Sharing.shareAsync(fileUri);
+    } catch (e) {
+      console.error("CSV Export Error", e);
+    }
   }, [products]);
 
-  // NEW: CSV Import Logic
+  // NEW: CSV Import Function
   const importFromCSV = useCallback(async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values' });
-    if (!result.canceled) {
-      const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
-      const lines = content.split('\n').slice(1); // Skip header
-      for (const line of lines) {
-        const [name, barcode, price, stock] = line.split(',');
-        if (name && barcode) {
-          await saveProductStorage({ 
-            name, 
-            barcode, 
-            price: parseFloat(price), 
-            stock: parseInt(stock) 
-          } as Product);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values' });
+      if (!res.canceled) {
+        const content = await FileSystem.readAsStringAsync(res.assets[0].uri);
+        const lines = content.split('\n').slice(1);
+        for (const line of lines) {
+          const [name, barcode, price, stock] = line.split(',');
+          if (name && barcode) {
+            await saveProductStorage({ name, barcode, price: parseFloat(price), stock: parseInt(stock) } as Product);
+          }
         }
+        await refresh();
       }
-      await refresh();
-      alert("Import Successful");
+    } catch (e) {
+      console.error("CSV Import Error", e);
     }
   }, [refresh]);
 
@@ -349,10 +334,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       lastSynced,
       syncNow,
       setSyncUrl,
-      // Added Values
+      // NEW: Added these to the exported value
       exportToPDF,
       exportToCSV,
-      importFromCSV
+      importFromCSV,
     }),
     [
       products,
@@ -379,7 +364,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       setSyncUrl,
       exportToPDF,
       exportToCSV,
-      importFromCSV
+      importFromCSV,
     ],
   );
 
