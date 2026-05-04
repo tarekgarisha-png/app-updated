@@ -9,12 +9,6 @@ import React, {
   useState,
 } from "react";
 
-// NEW: These libraries must be installed in your Shell first
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
-import * as DocumentPicker from 'expo-document-picker';
-
 import { isRTLFor, tFor, type Lang } from "@/lib/i18n";
 import {
   addPartialPayment as addPartialPaymentStorage,
@@ -75,10 +69,6 @@ type InventoryContextValue = {
   lastSynced: string | null;
   syncNow: () => Promise<void>;
   setSyncUrl: (url: string) => Promise<void>;
-  // NEW: Added these to the type definition
-  exportToPDF: (title: string, data: any[]) => Promise<void>;
-  exportToCSV: () => Promise<void>;
-  importFromCSV: () => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -127,50 +117,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     })();
-  }, [refresh]);
-
-  // NEW: PDF Export Function
-  const exportToPDF = useCallback(async (title: string, data: any[]) => {
-    try {
-      const html = `<html><body style="padding:20px;"><h1>${title}</h1><ul>${data.map(d => `<li>${d.name || 'Item'}: ${d.price || d.amount || 0}</li>`).join('')}</ul></body></html>`;
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri);
-    } catch (e) {
-      console.error("PDF Export Error", e);
-    }
-  }, []);
-
-  // NEW: CSV Export Function
-  const exportToCSV = useCallback(async () => {
-    try {
-      let csv = "Name,Barcode,Price,Stock\n";
-      products.forEach(p => { csv += `${p.name},${p.barcode},${p.price},${p.stock}\n`; });
-      const fileUri = FileSystem.documentDirectory + "inventory.csv";
-      await FileSystem.writeAsStringAsync(fileUri, csv);
-      await Sharing.shareAsync(fileUri);
-    } catch (e) {
-      console.error("CSV Export Error", e);
-    }
-  }, [products]);
-
-  // NEW: CSV Import Function
-  const importFromCSV = useCallback(async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values' });
-      if (!res.canceled) {
-        const content = await FileSystem.readAsStringAsync(res.assets[0].uri);
-        const lines = content.split('\n').slice(1);
-        for (const line of lines) {
-          const [name, barcode, price, stock] = line.split(',');
-          if (name && barcode) {
-            await saveProductStorage({ name, barcode, price: parseFloat(price), stock: parseInt(stock) } as Product);
-          }
-        }
-        await refresh();
-      }
-    } catch (e) {
-      console.error("CSV Import Error", e);
-    }
   }, [refresh]);
 
   const setLang = useCallback((l: Lang) => {
@@ -334,10 +280,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       lastSynced,
       syncNow,
       setSyncUrl,
-      // NEW: Added these to the exported value
-      exportToPDF,
-      exportToCSV,
-      importFromCSV,
     }),
     [
       products,
@@ -362,9 +304,6 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       lastSynced,
       syncNow,
       setSyncUrl,
-      exportToPDF,
-      exportToCSV,
-      importFromCSV,
     ],
   );
 
