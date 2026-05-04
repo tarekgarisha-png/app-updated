@@ -1,16 +1,4 @@
-/**
- * InventoryContext.tsx — Fixed version
- *
- * Changes vs original:
- * 1. PERFORMANCE: All derived values memoized with useMemo
- * 2. PERFORMANCE: Writes debounced (300ms) so AsyncStorage isn't hammered on every keystroke
- * 3. PERFORMANCE: Products/History split into separate storage writes so a product
- *    change doesn't re-serialise the entire history blob
- * 4. CSV EXPORT: uses expo-file-system + expo-sharing with proper Android content URI
- * 5. CSV IMPORT: tolerant header mapping preserved, error surfaced to caller
- * 6. PDF EXPORT: robust HTML template, proper async/await, error surfaced to caller
- */
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
   useCallback,
@@ -20,103 +8,49 @@ import React, {
   useRef,
   useState,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as Print from "expo-print";
 import { Platform } from "react-native";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { isRTLFor, tFor, type Lang } from "@/lib/i18n";
+import {
+  addPartialPayment as addPartialPaymentStorage,
+  clearHistory as clearHistoryStorage,
+  commitScanQueue,
+  deleteCreditEntry as deleteCreditEntryStorage,
+  deleteProduct as deleteProductStorage,
+  getAllProducts,
+  getHistory,
+  getPartialPayments,
+  markCreditEntryPaid as markCreditEntryPaidStorage,
+  markPersonDebtsPaid as markPersonDebtsPaidStorage,
+  returnBillSession as returnBillSessionStorage,
+  returnSingleEntry as returnSingleEntryStorage,
+  saveProduct as saveProductStorage,
+} from "@/lib/storage";
+import {
+  getLastSynced,
+  getSyncUrl,
+  pushAndPull,
+  saveLastSynced,
+  saveSyncUrl,
+  type SyncStatus,
+} from "@/lib/sync";
+import type {
+  HistoryEntry,
+  PartialPayment,
+  Product,
+  ScanQueueItem,
+  TransactionType,
+} from "@/lib/types";
 
-export interface Product {
-  id: string;
-  barcode: string;
-  name: string;
-  price: number;
-  purchasePrice: number;
-  quantity: number;
-  lowStockThreshold: number;
-  updatedAt: number; // epoch ms
-}
-
-export interface HistoryItem {
-  productId: string;
-  productName: string;
-  barcode: string;
-  quantity: number;
-  price: number;
-  mode: "SALE" | "PURCHASE" | "CREDIT" | "RETURN";
-}
-
-export interface HistoryEntry {
-  id: string;
-  timestamp: number;
-  items: HistoryItem[];
-  total: number;
-  paid: boolean;
-  returned: boolean;
-  shiftId: string;
-  personName?: string;
-}
-
-export interface PartialPayment {
-  id: string;
-  historyEntryId: string;
-  amount: number;
-  timestamp: number;
-}
-
-// ─── Storage keys ─────────────────────────────────────────────────────────────
-
-const KEYS = {
-  products: "inventory:products:v1",
-  history: "inventory:history:v1",
-  payments: "inventory:partial_payments:v1",
-} as const;
-
-// ─── Context type ─────────────────────────────────────────────────────────────
-
-interface InventoryContextType {
-  products: Product[];
-  history: HistoryEntry[];
-  partialPayments: PartialPayment[];
-  loading: boolean;
-
-  // Products
-  addProduct: (p: Omit<Product, "id" | "updatedAt">) => void;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
-  getProduct: (id: string) => Product | undefined;
-  getProductByBarcode: (barcode: string) => Product | undefined;
-
-  // History
-  addHistoryEntry: (entry: Omit<HistoryEntry, "id" | "timestamp">) => void;
-  markPaid: (id: string) => void;
-  markReturned: (id: string) => void;
-  returnItem: (entryId: string, productId: string, qty: number) => void;
-
-  // Payments
-  addPartialPayment: (p: Omit<PartialPayment, "id" | "timestamp">) => void;
-
-  // Import / Export
-  exportProductsCSV: () => Promise<void>;
-  exportHistoryCSV: () => Promise<void>;
-  importProductsCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
-  importHistoryCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
-  exportBillPDF: (entry: HistoryEntry) => Promise<void>;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
+// ─── CSV / PDF helpers ────────────────────────────────────────────────────────
 
 function escapeCSV(val: unknown): string {
   const s = String(val ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+  if (s.includes(",") || s.includes('"') || s.includes("\n"))
     return `"${s.replace(/"/g, '""')}"`;
-  }
   return s;
 }
 
@@ -127,266 +61,266 @@ function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
     } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
+      result.push(current); current = "";
+    } else { current += ch; }
   }
   result.push(current);
   return result;
 }
 
-/** Write text to a temp file and open the share sheet. Works on iOS & Android. */
-async function shareTextFile(filename: string, content: string, mimeType: string) {
+async function shareFile(filename: string, content: string, mimeType: string) {
   const uri = FileSystem.cacheDirectory + filename;
-  await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
-
-  const canShare = await Sharing.isAvailableAsync();
-  if (!canShare) throw new Error("Sharing is not available on this device");
-
-  await Sharing.shareAsync(uri, { mimeType, UTI: mimeType === "text/csv" ? "public.comma-separated-values-text" : "com.adobe.pdf" });
+  await FileSystem.writeAsStringAsync(uri, content, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  if (!(await Sharing.isAvailableAsync()))
+    throw new Error("Sharing is not available on this device");
+  await Sharing.shareAsync(uri, {
+    mimeType,
+    UTI: mimeType === "text/csv"
+      ? "public.comma-separated-values-text"
+      : "com.adobe.pdf",
+  });
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
-const InventoryContext = createContext<InventoryContextType | null>(null);
-
-export function useInventory() {
-  const ctx = useContext(InventoryContext);
-  if (!ctx) throw new Error("useInventory must be used inside <InventoryProvider>");
-  return ctx;
+function uid() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// ─── Debounce helper ──────────────────────────────────────────────────────────
+// ─── Context type (original + new export/import functions) ───────────────────
 
-function useDebounceCallback<T extends unknown[]>(
-  fn: (...args: T) => void,
-  delay: number
-) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  return useCallback(
-    (...args: T) => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => fn(...args), delay);
-    },
-    [fn, delay]
-  );
-}
+type InventoryContextValue = {
+  // ── original fields (DO NOT CHANGE) ──
+  products: Product[];
+  history: HistoryEntry[];
+  partialPayments: PartialPayment[];
+  loading: boolean;
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  refresh: () => Promise<void>;
+  saveProduct: (p: Product) => Promise<void>;
+  deleteProduct: (barcode: string) => Promise<void>;
+  commitQueue: (
+    queue: ScanQueueItem[],
+    mode: TransactionType,
+    personName?: string,
+    shiftId?: number,
+  ) => Promise<void>;
+  clearAllHistory: () => Promise<void>;
+  markEntryPaid: (entryId: string, paid: boolean) => Promise<void>;
+  markPersonPaid: (personName: string) => Promise<void>;
+  removeCreditEntry: (entryId: string) => Promise<void>;
+  returnBill: (sessionId: string) => Promise<void>;
+  returnEntry: (entryId: string) => Promise<void>;
+  addPartialPayment: (personName: string, amount: number, note?: string) => Promise<void>;
+  syncUrl: string;
+  syncStatus: SyncStatus;
+  lastSynced: string | null;
+  syncNow: () => Promise<void>;
+  setSyncUrl: (url: string) => Promise<void>;
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
+  // ── NEW: export / import / PDF ──
+  exportProductsCSV: () => Promise<void>;
+  exportHistoryCSV: () => Promise<void>;
+  importProductsCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
+  importHistoryCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
+  exportBillPDF: (entry: HistoryEntry) => Promise<void>;
+};
+
+const InventoryContext = createContext<InventoryContextValue | null>(null);
+
+const LANG_KEY = "inventory:lang:v1";
+const PRODUCTS_KEY = "inventory:products:v1";
+const HISTORY_KEY = "inventory:history:v1";
+const PAYMENTS_KEY = "inventory:partial_payments:v1";
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [partialPayments, setPartialPayments] = useState<PartialPayment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [lang, setLangState] = useState<Lang>("en");
+  const [syncUrl, setSyncUrlState] = useState<string>("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
 
-  // ── Load from storage on mount ────────────────────────────────────────────
+  // ── original refresh ──────────────────────────────────────────────────────
+
+  const refresh = useCallback(async () => {
+    const [p, h, pp] = await Promise.all([
+      getAllProducts(),
+      getHistory(600),
+      getPartialPayments(),
+    ]);
+    setProducts(p);
+    setHistory(h);
+    setPartialPayments(pp);
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const [rawP, rawH, rawPay] = await AsyncStorage.multiGet([
-          KEYS.products,
-          KEYS.history,
-          KEYS.payments,
+        const [storedLang, storedSyncUrl, storedLastSynced] = await Promise.all([
+          AsyncStorage.getItem(LANG_KEY),
+          getSyncUrl(),
+          getLastSynced(),
         ]);
-        if (rawP[1]) setProducts(JSON.parse(rawP[1]));
-        if (rawH[1]) setHistory(JSON.parse(rawH[1]));
-        if (rawPay[1]) setPartialPayments(JSON.parse(rawPay[1]));
-      } catch (e) {
-        console.error("InventoryContext load error", e);
+        if (storedLang === "ar" || storedLang === "en") setLangState(storedLang);
+        setSyncUrlState(storedSyncUrl);
+        setLastSynced(storedLastSynced);
+        await refresh();
       } finally {
         setLoading(false);
       }
     })();
+  }, [refresh]);
+
+  const setLang = useCallback((l: Lang) => {
+    setLangState(l);
+    AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
   }, []);
 
-  // ── Persist — debounced per-collection ───────────────────────────────────
+  // ── original sync ─────────────────────────────────────────────────────────
 
-  const saveProducts = useCallback((data: Product[]) => {
-    AsyncStorage.setItem(KEYS.products, JSON.stringify(data)).catch(console.error);
-  }, []);
-
-  const saveHistory = useCallback((data: HistoryEntry[]) => {
-    AsyncStorage.setItem(KEYS.history, JSON.stringify(data)).catch(console.error);
-  }, []);
-
-  const savePayments = useCallback((data: PartialPayment[]) => {
-    AsyncStorage.setItem(KEYS.payments, JSON.stringify(data)).catch(console.error);
-  }, []);
-
-  const debouncedSaveProducts = useDebounceCallback(saveProducts, 300);
-  const debouncedSaveHistory = useDebounceCallback(saveHistory, 300);
-
-  // ── Products ──────────────────────────────────────────────────────────────
-
-  const addProduct = useCallback((p: Omit<Product, "id" | "updatedAt">) => {
-    setProducts((prev) => {
-      const next = [...prev, { ...p, id: uid(), updatedAt: Date.now() }];
-      debouncedSaveProducts(next);
-      return next;
-    });
-  }, [debouncedSaveProducts]);
-
-  const updateProduct = useCallback((id: string, updates: Partial<Product>) => {
-    setProducts((prev) => {
-      const next = prev.map((p) =>
-        p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
-      );
-      debouncedSaveProducts(next);
-      return next;
-    });
-  }, [debouncedSaveProducts]);
-
-  const deleteProduct = useCallback((id: string) => {
-    setProducts((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      debouncedSaveProducts(next);
-      return next;
-    });
-  }, [debouncedSaveProducts]);
-
-  // Memoized lookup maps — O(1) instead of O(n) on every render
-  const productById = useMemo(
-    () => new Map(products.map((p) => [p.id, p])),
-    [products]
-  );
-  const productByBarcode = useMemo(
-    () => new Map(products.map((p) => [p.barcode, p])),
-    [products]
-  );
-
-  const getProduct = useCallback(
-    (id: string) => productById.get(id),
-    [productById]
-  );
-  const getProductByBarcode = useCallback(
-    (barcode: string) => productByBarcode.get(barcode),
-    [productByBarcode]
-  );
-
-  // ── History ───────────────────────────────────────────────────────────────
-
-  const addHistoryEntry = useCallback(
-    (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
-      setHistory((prev) => {
-        const next = [{ ...entry, id: uid(), timestamp: Date.now() }, ...prev];
-        debouncedSaveHistory(next);
-        return next;
+  const syncNow = useCallback(async () => {
+    if (!syncUrl) { setSyncStatus("off"); return; }
+    setSyncStatus("syncing");
+    try {
+      const [prods, hist, payments] = await Promise.all([
+        getAllProducts(),
+        getHistory(10000),
+        getPartialPayments(),
+      ]);
+      const merged = await pushAndPull(syncUrl, {
+        products: prods,
+        history: hist,
+        partialPayments: payments,
       });
+      await Promise.all([
+        AsyncStorage.setItem(PRODUCTS_KEY, JSON.stringify(merged.products)),
+        AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(merged.history)),
+        AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(merged.partialPayments)),
+      ]);
+      await refresh();
+      const now = new Date().toISOString();
+      setLastSynced(now);
+      await saveLastSynced(now);
+      setSyncStatus("ok");
+    } catch (err) {
+      console.error("sync failed", err instanceof Error ? err.message : "unknown");
+      setSyncStatus("error");
+    }
+  }, [syncUrl, refresh]);
+
+  const syncNowRef = useRef(syncNow);
+  useEffect(() => { syncNowRef.current = syncNow; }, [syncNow]);
+
+  const setSyncUrl = useCallback(async (url: string) => {
+    setSyncUrlState(url);
+    await saveSyncUrl(url);
+    setSyncStatus("idle");
+  }, []);
+
+  // ── original CRUD ─────────────────────────────────────────────────────────
+
+  const saveProduct = useCallback(async (p: Product) => {
+    await saveProductStorage(p);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
+
+  const deleteProduct = useCallback(async (barcode: string) => {
+    await deleteProductStorage(barcode);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
+
+  const commitQueue = useCallback(
+    async (queue: ScanQueueItem[], mode: TransactionType, personName?: string, shiftId?: number) => {
+      await commitScanQueue(queue, mode, personName, shiftId);
+      await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
-    [debouncedSaveHistory]
+    [refresh],
   );
 
-  const markPaid = useCallback((id: string) => {
-    setHistory((prev) => {
-      const next = prev.map((e) => (e.id === id ? { ...e, paid: true } : e));
-      debouncedSaveHistory(next);
-      return next;
-    });
-  }, [debouncedSaveHistory]);
+  const clearAllHistory = useCallback(async () => {
+    await clearHistoryStorage();
+    await refresh();
+  }, [refresh]);
 
-  const markReturned = useCallback((id: string) => {
-    setHistory((prev) => {
-      const next = prev.map((e) =>
-        e.id === id ? { ...e, returned: true } : e
-      );
-      debouncedSaveHistory(next);
-      return next;
-    });
-  }, [debouncedSaveHistory]);
+  const markEntryPaid = useCallback(async (entryId: string, paid: boolean) => {
+    await markCreditEntryPaidStorage(entryId, paid);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
 
-  const returnItem = useCallback(
-    (entryId: string, productId: string, qty: number) => {
-      // Update history
-      setHistory((prev) => {
-        const next = prev.map((e) => {
-          if (e.id !== entryId) return e;
-          return {
-            ...e,
-            items: e.items.map((item) =>
-              item.productId === productId
-                ? { ...item, quantity: Math.max(0, item.quantity - qty) }
-                : item
-            ),
-          };
-        });
-        debouncedSaveHistory(next);
-        return next;
-      });
-      // Restock product
-      setProducts((prev) => {
-        const next = prev.map((p) =>
-          p.id === productId
-            ? { ...p, quantity: p.quantity + qty, updatedAt: Date.now() }
-            : p
-        );
-        debouncedSaveProducts(next);
-        return next;
-      });
-    },
-    [debouncedSaveHistory, debouncedSaveProducts]
-  );
+  const markPersonPaid = useCallback(async (personName: string) => {
+    await markPersonDebtsPaidStorage(personName);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
 
-  // ── Partial payments ──────────────────────────────────────────────────────
+  const removeCreditEntry = useCallback(async (entryId: string) => {
+    await deleteCreditEntryStorage(entryId);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
+
+  const returnBill = useCallback(async (sessionId: string) => {
+    await returnBillSessionStorage(sessionId);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
+
+  const returnEntry = useCallback(async (entryId: string) => {
+    await returnSingleEntryStorage(entryId);
+    await refresh();
+    setTimeout(() => syncNowRef.current().catch(() => {}), 200);
+  }, [refresh]);
 
   const addPartialPayment = useCallback(
-    (p: Omit<PartialPayment, "id" | "timestamp">) => {
-      setPartialPayments((prev) => {
-        const next = [...prev, { ...p, id: uid(), timestamp: Date.now() }];
-        savePayments(next);
-        return next;
-      });
+    async (personName: string, amount: number, note?: string) => {
+      await addPartialPaymentStorage(personName, amount, note);
+      await refresh();
+      setTimeout(() => syncNowRef.current().catch(() => {}), 200);
     },
-    [savePayments]
+    [refresh],
   );
 
-  // ── CSV Export ────────────────────────────────────────────────────────────
+  // ── NEW: Export Products CSV ──────────────────────────────────────────────
 
   const exportProductsCSV = useCallback(async () => {
-    const headers = [
-      "id", "barcode", "name", "price", "purchasePrice",
-      "quantity", "lowStockThreshold", "updatedAt",
-    ];
+    const headers = ["barcode", "name", "price", "purchasePrice", "quantity", "lowStockThreshold"];
     const rows = products.map((p) =>
-      headers.map((h) => escapeCSV(p[h as keyof Product])).join(",")
+      headers.map((h) => escapeCSV((p as any)[h])).join(",")
     );
     const csv = [headers.join(","), ...rows].join("\n");
-    await shareTextFile(`products_${Date.now()}.csv`, csv, "text/csv");
+    await shareFile(`products_${Date.now()}.csv`, csv, "text/csv");
   }, [products]);
 
+  // ── NEW: Export History CSV ───────────────────────────────────────────────
+
   const exportHistoryCSV = useCallback(async () => {
-    const headers = [
-      "id", "timestamp", "shiftId", "personName",
-      "total", "paid", "returned",
-      "items_json",
-    ];
-    const rows = history.map((e) =>
-      [
-        escapeCSV(e.id),
-        escapeCSV(new Date(e.timestamp).toISOString()),
-        escapeCSV(e.shiftId),
-        escapeCSV(e.personName ?? ""),
-        escapeCSV(e.total),
-        escapeCSV(e.paid),
-        escapeCSV(e.returned),
-        escapeCSV(JSON.stringify(e.items)),
-      ].join(",")
-    );
+    const headers = ["id", "timestamp", "type", "personName", "total", "paid", "returned", "items_json"];
+    const rows = history.map((e) => [
+      escapeCSV((e as any).id ?? ""),
+      escapeCSV(new Date((e as any).timestamp ?? Date.now()).toISOString()),
+      escapeCSV((e as any).type ?? (e as any).mode ?? ""),
+      escapeCSV((e as any).personName ?? ""),
+      escapeCSV((e as any).total ?? ""),
+      escapeCSV((e as any).paid ?? ""),
+      escapeCSV((e as any).returned ?? ""),
+      escapeCSV(JSON.stringify((e as any).items ?? [])),
+    ].join(","));
     const csv = [headers.join(","), ...rows].join("\n");
-    await shareTextFile(`history_${Date.now()}.csv`, csv, "text/csv");
+    await shareFile(`history_${Date.now()}.csv`, csv, "text/csv");
   }, [history]);
 
-  // ── CSV Import ────────────────────────────────────────────────────────────
+  // ── NEW: Import Products CSV ──────────────────────────────────────────────
 
   const importProductsCSV = useCallback(
     async (uri: string): Promise<{ imported: number; errors: string[] }> => {
@@ -396,51 +330,31 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const lines = raw.trim().split("\n");
       if (lines.length < 2) return { imported: 0, errors: ["File is empty"] };
 
-      // Tolerant header mapping (case-insensitive, ignores BOM)
-      const headerLine = lines[0].replace(/^\uFEFF/, "");
-      const headerFields = parseCSVLine(headerLine).map((h) =>
-        h.trim().toLowerCase()
-      );
-
       const FIELD_MAP: Record<string, string> = {
-        barcode: "barcode",
-        "bar code": "barcode",
-        sku: "barcode",
-        name: "name",
-        "product name": "name",
-        price: "price",
-        "sale price": "price",
-        purchaseprice: "purchasePrice",
-        "purchase price": "purchasePrice",
-        cost: "purchasePrice",
-        quantity: "quantity",
-        qty: "quantity",
-        stock: "quantity",
-        lowstockthreshold: "lowStockThreshold",
-        "low stock": "lowStockThreshold",
+        barcode: "barcode", "bar code": "barcode", sku: "barcode",
+        name: "name", "product name": "name",
+        price: "price", "sale price": "price",
+        purchaseprice: "purchasePrice", "purchase price": "purchasePrice", cost: "purchasePrice",
+        quantity: "quantity", qty: "quantity", stock: "quantity",
+        lowstockthreshold: "lowStockThreshold", "low stock": "lowStockThreshold",
         "low stock threshold": "lowStockThreshold",
       };
 
-      const mapped = headerFields.map((h) => FIELD_MAP[h] ?? h);
+      const headers = parseCSVLine(lines[0].replace(/^\uFEFF/, ""))
+        .map((h) => FIELD_MAP[h.trim().toLowerCase()] ?? h.trim().toLowerCase());
 
       const errors: string[] = [];
-      const imported: Product[] = [];
+      let imported = 0;
 
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
         const fields = parseCSVLine(lines[i]);
         const row: Record<string, string> = {};
-        mapped.forEach((key, idx) => {
-          row[key] = (fields[idx] ?? "").trim();
-        });
+        headers.forEach((h, idx) => (row[h] = (fields[idx] ?? "").trim()));
 
-        if (!row.name) {
-          errors.push(`Row ${i + 1}: missing name`);
-          continue;
-        }
+        if (!row.name) { errors.push(`Row ${i + 1}: missing name`); continue; }
 
-        imported.push({
-          id: row.id || uid(),
+        const product: Product = {
           barcode: row.barcode || uid(),
           name: row.name,
           price: parseFloat(row.price) || 0,
@@ -448,24 +362,23 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           quantity: parseInt(row.quantity, 10) || 0,
           lowStockThreshold: parseInt(row.lowStockThreshold, 10) || 5,
           updatedAt: Date.now(),
-        });
+        } as any;
+
+        try {
+          await saveProductStorage(product);
+          imported++;
+        } catch (e) {
+          errors.push(`Row ${i + 1}: ${String(e)}`);
+        }
       }
 
-      if (imported.length > 0) {
-        setProducts((prev) => {
-          // Merge: existing product with same barcode gets updated, new ones appended
-          const byBarcode = new Map(prev.map((p) => [p.barcode, p]));
-          imported.forEach((p) => byBarcode.set(p.barcode, p));
-          const next = Array.from(byBarcode.values());
-          saveProducts(next);
-          return next;
-        });
-      }
-
-      return { imported: imported.length, errors };
+      if (imported > 0) await refresh();
+      return { imported, errors };
     },
-    [saveProducts]
+    [refresh],
   );
+
+  // ── NEW: Import History CSV ───────────────────────────────────────────────
 
   const importHistoryCSV = useCallback(
     async (uri: string): Promise<{ imported: number; errors: string[] }> => {
@@ -475,11 +388,16 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const lines = raw.trim().split("\n");
       if (lines.length < 2) return { imported: 0, errors: ["File is empty"] };
 
-      const errors: string[] = [];
-      const imported: HistoryEntry[] = [];
+      // History import goes through AsyncStorage directly since there's
+      // no individual-entry save in storage.ts
+      const existing = await getHistory(10000);
+      const byId = new Map(existing.map((e: any) => [e.id, e]));
 
-      const headerLine = lines[0].replace(/^\uFEFF/, "");
-      const headers = parseCSVLine(headerLine).map((h) => h.trim().toLowerCase());
+      const headers = parseCSVLine(lines[0].replace(/^\uFEFF/, ""))
+        .map((h) => h.trim().toLowerCase());
+
+      const errors: string[] = [];
+      let imported = 0;
 
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
@@ -488,197 +406,157 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           const row: Record<string, string> = {};
           headers.forEach((h, idx) => (row[h] = (fields[idx] ?? "").trim()));
 
-          let items: HistoryItem[] = [];
+          let items: any[] = [];
           if (row.items_json) {
-            try {
-              items = JSON.parse(row.items_json);
-            } catch {
-              errors.push(`Row ${i + 1}: invalid items_json`);
-            }
+            try { items = JSON.parse(row.items_json); }
+            catch { errors.push(`Row ${i + 1}: invalid items_json`); }
           }
 
-          imported.push({
-            id: row.id || uid(),
+          const id = row.id || uid();
+          const entry: any = {
+            id,
             timestamp: row.timestamp ? new Date(row.timestamp).getTime() : Date.now(),
-            shiftId: row.shiftid || row.shiftId || "1",
-            personName: row.personname || row.personName || undefined,
+            type: row.type || row.mode || "SALE",
+            personName: row.personname || undefined,
             total: parseFloat(row.total) || 0,
             paid: row.paid === "true",
             returned: row.returned === "true",
             items,
-          });
+          };
+
+          // OR flags if entry already exists
+          const existing2 = byId.get(id) as any;
+          if (existing2) {
+            entry.paid = existing2.paid || entry.paid;
+            entry.returned = existing2.returned || entry.returned;
+          }
+          byId.set(id, entry);
+          imported++;
         } catch (e) {
-          errors.push(`Row ${i + 1}: parse error — ${String(e)}`);
+          errors.push(`Row ${i + 1}: ${String(e)}`);
         }
       }
 
-      if (imported.length > 0) {
-        setHistory((prev) => {
-          const byId = new Map(prev.map((e) => [e.id, e]));
-          imported.forEach((e) => {
-            // Union: existing entry flags get OR'd
-            const existing = byId.get(e.id);
-            if (existing) {
-              byId.set(e.id, {
-                ...e,
-                paid: existing.paid || e.paid,
-                returned: existing.returned || e.returned,
-              });
-            } else {
-              byId.set(e.id, e);
-            }
-          });
-          const next = Array.from(byId.values()).sort(
-            (a, b) => b.timestamp - a.timestamp
-          );
-          saveHistory(next);
-          return next;
-        });
+      if (imported > 0) {
+        const merged = Array.from(byId.values()).sort(
+          (a: any, b: any) => b.timestamp - a.timestamp
+        );
+        await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+        await refresh();
       }
 
-      return { imported: imported.length, errors };
+      return { imported, errors };
     },
-    [saveHistory]
+    [refresh],
   );
 
-  // ── PDF Export ────────────────────────────────────────────────────────────
+  // ── NEW: Export Bill PDF ──────────────────────────────────────────────────
 
   const exportBillPDF = useCallback(async (entry: HistoryEntry) => {
-    const dateStr = new Date(entry.timestamp).toLocaleString();
-    const itemRows = entry.items
-      .map(
-        (item) => `
-      <tr>
-        <td>${item.productName}</td>
-        <td style="text-align:center">${item.mode}</td>
-        <td style="text-align:center">${item.quantity}</td>
-        <td style="text-align:right">${item.price.toFixed(2)}</td>
-        <td style="text-align:right">${(item.price * item.quantity).toFixed(2)}</td>
-      </tr>`
-      )
-      .join("");
+    const e = entry as any;
+    const dateStr = new Date(e.timestamp ?? Date.now()).toLocaleString();
+    const items: any[] = e.items ?? [];
 
-    const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bill #${entry.id.slice(-6)}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 32px; }
-    h1 { font-size: 22px; margin-bottom: 4px; }
-    .meta { color: #555; margin-bottom: 24px; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-    th { background: #1a1a2e; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; }
-    td { padding: 7px 10px; border-bottom: 1px solid #eee; }
-    tr:last-child td { border-bottom: none; }
-    .totals { margin-left: auto; width: 260px; }
-    .totals tr td:first-child { color: #555; }
-    .totals tr td:last-child { text-align: right; font-weight: 600; }
-    .totals tr.grand td { font-size: 15px; border-top: 2px solid #222; padding-top: 8px; }
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-    .paid { background: #d1fae5; color: #065f46; }
-    .unpaid { background: #fee2e2; color: #991b1b; }
-    .footer { margin-top: 40px; border-top: 1px solid #ddd; padding-top: 12px; font-size: 11px; color: #999; text-align: center; }
-  </style>
-</head>
-<body>
-  <h1>Invoice / Bill</h1>
-  <div class="meta">
-    <div><strong>Bill #:</strong> ${entry.id.slice(-8).toUpperCase()}</div>
-    <div><strong>Date:</strong> ${dateStr}</div>
-    ${entry.personName ? `<div><strong>Customer:</strong> ${entry.personName}</div>` : ""}
-    <div><strong>Shift:</strong> ${entry.shiftId}</div>
-    <div style="margin-top:6px">
-      <span class="badge ${entry.paid ? "paid" : "unpaid"}">${entry.paid ? "PAID" : "UNPAID"}</span>
-    </div>
+    const itemRows = items.map((item: any) => `
+      <tr>
+        <td>${item.productName ?? item.name ?? ""}</td>
+        <td style="text-align:center">${item.mode ?? item.type ?? ""}</td>
+        <td style="text-align:center">${item.quantity ?? 1}</td>
+        <td style="text-align:right">${Number(item.price ?? 0).toFixed(2)}</td>
+        <td style="text-align:right">${(Number(item.price ?? 0) * Number(item.quantity ?? 1)).toFixed(2)}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#222;padding:32px}
+h1{font-size:22px;margin-bottom:4px}
+.meta{color:#555;margin-bottom:24px;font-size:12px;line-height:1.8}
+table{width:100%;border-collapse:collapse;margin-bottom:24px}
+th{background:#1a1a2e;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
+td{padding:7px 10px;border-bottom:1px solid #eee}
+.totals{margin-left:auto;width:260px}
+.totals td:last-child{text-align:right;font-weight:600}
+.grand td{font-size:15px;border-top:2px solid #222;padding-top:8px}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.paid{background:#d1fae5;color:#065f46}
+.unpaid{background:#fee2e2;color:#991b1b}
+.footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#999;text-align:center}
+</style></head><body>
+<h1>Invoice / Bill</h1>
+<div class="meta">
+  <div><strong>Bill #:</strong> ${String(e.id ?? "").slice(-8).toUpperCase()}</div>
+  <div><strong>Date:</strong> ${dateStr}</div>
+  <div><strong>Type:</strong> ${e.type ?? e.mode ?? ""}</div>
+  ${e.personName ? `<div><strong>Customer:</strong> ${e.personName}</div>` : ""}
+  ${e.shiftId ? `<div><strong>Shift:</strong> ${e.shiftId}</div>` : ""}
+  <div style="margin-top:6px">
+    <span class="badge ${e.paid ? "paid" : "unpaid"}">${e.paid ? "PAID" : "UNPAID"}</span>
+    ${e.returned ? '<span class="badge" style="background:#fef3c7;color:#92400e;margin-left:6px">RETURNED</span>' : ""}
   </div>
+</div>
+<table>
+  <thead><tr>
+    <th>Product</th>
+    <th style="text-align:center">Mode</th>
+    <th style="text-align:center">Qty</th>
+    <th style="text-align:right">Unit Price</th>
+    <th style="text-align:right">Subtotal</th>
+  </tr></thead>
+  <tbody>${itemRows}</tbody>
+</table>
+<table class="totals">
+  <tr><td>Subtotal</td><td>${Number(e.total ?? 0).toFixed(2)}</td></tr>
+  <tr class="grand"><td>Total</td><td>${Number(e.total ?? 0).toFixed(2)}</td></tr>
+</table>
+<div class="footer">Inventory Scanner · ${new Date().toLocaleDateString()}</div>
+</body></html>`;
 
-  <table>
-    <thead>
-      <tr>
-        <th>Product</th>
-        <th style="text-align:center">Mode</th>
-        <th style="text-align:center">Qty</th>
-        <th style="text-align:right">Unit Price</th>
-        <th style="text-align:right">Subtotal</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemRows}
-    </tbody>
-  </table>
-
-  <table class="totals">
-    <tr>
-      <td>Subtotal</td>
-      <td>${entry.total.toFixed(2)}</td>
-    </tr>
-    <tr class="grand">
-      <td>Total</td>
-      <td>${entry.total.toFixed(2)}</td>
-    </tr>
-  </table>
-
-  <div class="footer">Generated by Inventory Scanner · ${new Date().toLocaleDateString()}</div>
-</body>
-</html>`;
-
-    // Generate PDF
     const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-    // On iOS expo-print already writes a shareable URI.
-    // On Android we need to copy to a known cache location for Sharing.
     let shareUri = uri;
     if (Platform.OS === "android") {
-      const dest = FileSystem.cacheDirectory + `bill_${entry.id.slice(-8)}.pdf`;
+      const dest = FileSystem.cacheDirectory + `bill_${String(e.id ?? Date.now()).slice(-8)}.pdf`;
       await FileSystem.copyAsync({ from: uri, to: dest });
       shareUri = dest;
     }
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (!canShare) throw new Error("Sharing is not available on this device");
-
+    if (!(await Sharing.isAvailableAsync()))
+      throw new Error("Sharing is not available on this device");
     await Sharing.shareAsync(shareUri, {
       mimeType: "application/pdf",
       UTI: "com.adobe.pdf",
-      dialogTitle: `Bill #${entry.id.slice(-8).toUpperCase()}`,
+      dialogTitle: `Bill #${String(e.id ?? "").slice(-8).toUpperCase()}`,
     });
   }, []);
 
-  // ── Context value — memoized so consumers don't re-render unnecessarily ───
+  // ── context value ─────────────────────────────────────────────────────────
 
-  const value = useMemo<InventoryContextType>(
+  const value = useMemo<InventoryContextValue>(
     () => ({
-      products,
-      history,
-      partialPayments,
-      loading,
-      addProduct,
-      updateProduct,
-      deleteProduct,
-      getProduct,
-      getProductByBarcode,
-      addHistoryEntry,
-      markPaid,
-      markReturned,
-      returnItem,
-      addPartialPayment,
-      exportProductsCSV,
-      exportHistoryCSV,
-      importProductsCSV,
-      importHistoryCSV,
+      // original
+      products, history, partialPayments, loading,
+      lang, setLang, refresh,
+      saveProduct, deleteProduct, commitQueue, clearAllHistory,
+      markEntryPaid, markPersonPaid, removeCreditEntry,
+      returnBill, returnEntry, addPartialPayment,
+      syncUrl, syncStatus, lastSynced, syncNow, setSyncUrl,
+      // new
+      exportProductsCSV, exportHistoryCSV,
+      importProductsCSV, importHistoryCSV,
       exportBillPDF,
     }),
     [
       products, history, partialPayments, loading,
-      addProduct, updateProduct, deleteProduct, getProduct, getProductByBarcode,
-      addHistoryEntry, markPaid, markReturned, returnItem, addPartialPayment,
-      exportProductsCSV, exportHistoryCSV, importProductsCSV, importHistoryCSV,
+      lang, setLang, refresh,
+      saveProduct, deleteProduct, commitQueue, clearAllHistory,
+      markEntryPaid, markPersonPaid, removeCreditEntry,
+      returnBill, returnEntry, addPartialPayment,
+      syncUrl, syncStatus, lastSynced, syncNow, setSyncUrl,
+      exportProductsCSV, exportHistoryCSV,
+      importProductsCSV, importHistoryCSV,
       exportBillPDF,
-    ]
+    ],
   );
 
   return (
@@ -686,4 +564,19 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       {children}
     </InventoryContext.Provider>
   );
+}
+
+export function useInventory(): InventoryContextValue {
+  const ctx = useContext(InventoryContext);
+  if (!ctx) throw new Error("useInventory must be used within InventoryProvider");
+  return ctx;
+}
+
+export function useT() {
+  const { lang } = useInventory();
+  return {
+    t: (key: string, ...args: any[]) => tFor(lang, key, ...args),
+    rtl: isRTLFor(lang),
+    lang,
+  };
 }
