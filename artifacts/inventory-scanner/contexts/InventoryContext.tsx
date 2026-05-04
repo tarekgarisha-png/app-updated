@@ -90,10 +90,10 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// ─── Context type (original + new export/import functions) ───────────────────
+// ─── Context type ─────────────────────────────────────────────────────────────
 
 type InventoryContextValue = {
-  // ── original fields (DO NOT CHANGE) ──
+  // ── original (unchanged) ──
   products: Product[];
   history: HistoryEntry[];
   partialPayments: PartialPayment[];
@@ -122,30 +122,30 @@ type InventoryContextValue = {
   syncNow: () => Promise<void>;
   setSyncUrl: (url: string) => Promise<void>;
 
-  // ── NEW: export / import / PDF ──
+  // ── new ──
   exportProductsCSV: () => Promise<void>;
   exportHistoryCSV: () => Promise<void>;
   importProductsCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
   importHistoryCSV: (uri: string) => Promise<{ imported: number; errors: string[] }>;
-  exportBillPDF: (entry: HistoryEntry) => Promise<void>;
+  exportBillPDF: (sessionId: string) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
-const LANG_KEY = "inventory:lang:v1";
+const LANG_KEY     = "inventory:lang:v1";
 const PRODUCTS_KEY = "inventory:products:v1";
-const HISTORY_KEY = "inventory:history:v1";
+const HISTORY_KEY  = "inventory:history:v1";
 const PAYMENTS_KEY = "inventory:partial_payments:v1";
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [products,        setProducts]        = useState<Product[]>([]);
+  const [history,         setHistory]         = useState<HistoryEntry[]>([]);
   const [partialPayments, setPartialPayments] = useState<PartialPayment[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [lang, setLangState] = useState<Lang>("en");
-  const [syncUrl, setSyncUrlState] = useState<string>("");
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
-  const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [loading,         setLoading]         = useState<boolean>(true);
+  const [lang,            setLangState]       = useState<Lang>("en");
+  const [syncUrl,         setSyncUrlState]    = useState<string>("");
+  const [syncStatus,      setSyncStatus]      = useState<SyncStatus>("idle");
+  const [lastSynced,      setLastSynced]      = useState<string | null>(null);
 
   // ── original refresh ──────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       });
       await Promise.all([
         AsyncStorage.setItem(PRODUCTS_KEY, JSON.stringify(merged.products)),
-        AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(merged.history)),
+        AsyncStorage.setItem(HISTORY_KEY,  JSON.stringify(merged.history)),
         AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(merged.partialPayments)),
       ]);
       await refresh();
@@ -224,7 +224,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus("idle");
   }, []);
 
-  // ── original CRUD ─────────────────────────────────────────────────────────
+  // ── original CRUD (all unchanged) ────────────────────────────────────────
 
   const saveProduct = useCallback(async (p: Product) => {
     await saveProductStorage(p);
@@ -292,35 +292,41 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ── NEW: Export Products CSV ──────────────────────────────────────────────
+  // Columns match Product type exactly:
+  // barcode, name, nameAr, category, stock, minStock, unit, price
 
   const exportProductsCSV = useCallback(async () => {
-    const headers = ["barcode", "name", "price", "purchasePrice", "quantity", "lowStockThreshold"];
+    const headers: (keyof Product)[] = [
+      "barcode", "name", "nameAr", "category",
+      "stock", "minStock", "unit", "price",
+    ];
     const rows = products.map((p) =>
-      headers.map((h) => escapeCSV((p as any)[h])).join(",")
+      headers.map((h) => escapeCSV(p[h] ?? "")).join(",")
     );
     const csv = [headers.join(","), ...rows].join("\n");
     await shareFile(`products_${Date.now()}.csv`, csv, "text/csv");
   }, [products]);
 
   // ── NEW: Export History CSV ───────────────────────────────────────────────
+  // Columns match HistoryEntry type exactly:
+  // id, barcode, name, type, qty, unitPrice, amount, personName,
+  // paid, paidAt, sessionId, returnedFrom, returned, date, shiftId
 
   const exportHistoryCSV = useCallback(async () => {
-    const headers = ["id", "timestamp", "type", "personName", "total", "paid", "returned", "items_json"];
-    const rows = history.map((e) => [
-      escapeCSV((e as any).id ?? ""),
-      escapeCSV(new Date((e as any).timestamp ?? Date.now()).toISOString()),
-      escapeCSV((e as any).type ?? (e as any).mode ?? ""),
-      escapeCSV((e as any).personName ?? ""),
-      escapeCSV((e as any).total ?? ""),
-      escapeCSV((e as any).paid ?? ""),
-      escapeCSV((e as any).returned ?? ""),
-      escapeCSV(JSON.stringify((e as any).items ?? [])),
-    ].join(","));
+    const headers: (keyof HistoryEntry)[] = [
+      "id", "barcode", "name", "type", "qty", "unitPrice", "amount",
+      "personName", "paid", "paidAt", "sessionId", "returnedFrom",
+      "returned", "date", "shiftId",
+    ];
+    const rows = history.map((e) =>
+      headers.map((h) => escapeCSV(e[h] ?? "")).join(",")
+    );
     const csv = [headers.join(","), ...rows].join("\n");
     await shareFile(`history_${Date.now()}.csv`, csv, "text/csv");
   }, [history]);
 
   // ── NEW: Import Products CSV ──────────────────────────────────────────────
+  // Accepts the exported format or common variants (qty/quantity, etc.)
 
   const importProductsCSV = useCallback(
     async (uri: string): Promise<{ imported: number; errors: string[] }> => {
@@ -330,14 +336,17 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const lines = raw.trim().split("\n");
       if (lines.length < 2) return { imported: 0, errors: ["File is empty"] };
 
-      const FIELD_MAP: Record<string, string> = {
+      // Tolerant header mapping → canonical Product field names
+      const FIELD_MAP: Record<string, keyof Product | string> = {
         barcode: "barcode", "bar code": "barcode", sku: "barcode",
         name: "name", "product name": "name",
+        namear: "nameAr", "name ar": "nameAr", "arabic name": "nameAr",
+        category: "category",
+        stock: "stock", quantity: "stock", qty: "stock",
+        minstock: "minStock", "min stock": "minStock",
+        "low stock": "minStock", minstockthreshold: "minStock",
+        unit: "unit",
         price: "price", "sale price": "price",
-        purchaseprice: "purchasePrice", "purchase price": "purchasePrice", cost: "purchasePrice",
-        quantity: "quantity", qty: "quantity", stock: "quantity",
-        lowstockthreshold: "lowStockThreshold", "low stock": "lowStockThreshold",
-        "low stock threshold": "lowStockThreshold",
       };
 
       const headers = parseCSVLine(lines[0].replace(/^\uFEFF/, ""))
@@ -350,25 +359,28 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         if (!lines[i].trim()) continue;
         const fields = parseCSVLine(lines[i]);
         const row: Record<string, string> = {};
-        headers.forEach((h, idx) => (row[h] = (fields[idx] ?? "").trim()));
+        headers.forEach((h, idx) => (row[h as string] = (fields[idx] ?? "").trim()));
 
-        if (!row.name) { errors.push(`Row ${i + 1}: missing name`); continue; }
+        if (!row.barcode) { errors.push(`Row ${i + 1}: missing barcode`); continue; }
+        if (!row.name)    { errors.push(`Row ${i + 1}: missing name`);    continue; }
 
         const product: Product = {
-          barcode: row.barcode || uid(),
-          name: row.name,
-          price: parseFloat(row.price) || 0,
-          purchasePrice: parseFloat(row.purchasePrice) || 0,
-          quantity: parseInt(row.quantity, 10) || 0,
-          lowStockThreshold: parseInt(row.lowStockThreshold, 10) || 5,
-          updatedAt: Date.now(),
-        } as any;
+          barcode:  row.barcode,
+          name:     row.name,
+          nameAr:   row.nameAr   ?? "",
+          category: row.category ?? undefined,
+          stock:    parseInt(row.stock, 10)    || 0,
+          minStock: parseInt(row.minStock, 10) || 0,
+          unit:     row.unit  || "pcs",
+          price:    parseFloat(row.price)      || 0,
+          updatedAt: new Date().toISOString(),
+        };
 
         try {
           await saveProductStorage(product);
           imported++;
         } catch (e) {
-          errors.push(`Row ${i + 1}: ${String(e)}`);
+          errors.push(`Row ${i + 1} (${row.name}): ${String(e)}`);
         }
       }
 
@@ -379,6 +391,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ── NEW: Import History CSV ───────────────────────────────────────────────
+  // Accepts the exported format. Each row = one HistoryEntry.
 
   const importHistoryCSV = useCallback(
     async (uri: string): Promise<{ imported: number; errors: string[] }> => {
@@ -388,13 +401,27 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const lines = raw.trim().split("\n");
       if (lines.length < 2) return { imported: 0, errors: ["File is empty"] };
 
-      // History import goes through AsyncStorage directly since there's
-      // no individual-entry save in storage.ts
-      const existing = await getHistory(10000);
-      const byId = new Map(existing.map((e: any) => [e.id, e]));
+      const FIELD_MAP: Record<string, string> = {
+        id: "id", barcode: "barcode", name: "name",
+        type: "type", mode: "type",
+        qty: "qty", quantity: "qty",
+        unitprice: "unitPrice", "unit price": "unitPrice", price: "unitPrice",
+        amount: "amount", total: "amount",
+        personname: "personName", "person name": "personName", customer: "personName",
+        paid: "paid", paidat: "paidAt",
+        sessionid: "sessionId", session: "sessionId",
+        returnedfrom: "returnedFrom",
+        returned: "returned",
+        date: "date", timestamp: "date",
+        shiftid: "shiftId", shift: "shiftId",
+      };
 
       const headers = parseCSVLine(lines[0].replace(/^\uFEFF/, ""))
-        .map((h) => h.trim().toLowerCase());
+        .map((h) => FIELD_MAP[h.trim().toLowerCase()] ?? h.trim().toLowerCase());
+
+      // Load existing history to merge into
+      const existing = await getHistory(10000);
+      const byId = new Map(existing.map((e) => [e.id, e]));
 
       const errors: string[] = [];
       let imported = 0;
@@ -406,30 +433,35 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           const row: Record<string, string> = {};
           headers.forEach((h, idx) => (row[h] = (fields[idx] ?? "").trim()));
 
-          let items: any[] = [];
-          if (row.items_json) {
-            try { items = JSON.parse(row.items_json); }
-            catch { errors.push(`Row ${i + 1}: invalid items_json`); }
-          }
+          if (!row.barcode) { errors.push(`Row ${i + 1}: missing barcode`); continue; }
+          if (!row.type)    { errors.push(`Row ${i + 1}: missing type`);    continue; }
 
           const id = row.id || uid();
-          const entry: any = {
+          const entry: HistoryEntry = {
             id,
-            timestamp: row.timestamp ? new Date(row.timestamp).getTime() : Date.now(),
-            type: row.type || row.mode || "SALE",
-            personName: row.personname || undefined,
-            total: parseFloat(row.total) || 0,
-            paid: row.paid === "true",
-            returned: row.returned === "true",
-            items,
+            barcode:      row.barcode,
+            name:         row.name ?? "",
+            type:         (row.type as TransactionType) ?? "SALE",
+            qty:          parseFloat(row.qty)       || 0,
+            unitPrice:    parseFloat(row.unitPrice)  || 0,
+            amount:       parseFloat(row.amount)     || 0,
+            personName:   row.personName  || undefined,
+            paid:         row.paid === "true" ? true : row.paid === "false" ? false : undefined,
+            paidAt:       row.paidAt      || undefined,
+            sessionId:    row.sessionId   || undefined,
+            returnedFrom: row.returnedFrom || undefined,
+            returned:     row.returned === "true" ? true : undefined,
+            date:         row.date || new Date().toISOString(),
+            shiftId:      row.shiftId ? parseInt(row.shiftId, 10) : undefined,
           };
 
-          // OR flags if entry already exists
-          const existing2 = byId.get(id) as any;
-          if (existing2) {
-            entry.paid = existing2.paid || entry.paid;
-            entry.returned = existing2.returned || entry.returned;
+          // OR boolean flags if entry already exists
+          const ex = byId.get(id);
+          if (ex) {
+            entry.paid     = ex.paid     || entry.paid;
+            entry.returned = ex.returned || entry.returned;
           }
+
           byId.set(id, entry);
           imported++;
         } catch (e) {
@@ -439,7 +471,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
       if (imported > 0) {
         const merged = Array.from(byId.values()).sort(
-          (a: any, b: any) => b.timestamp - a.timestamp
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
         await refresh();
@@ -451,19 +483,37 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ── NEW: Export Bill PDF ──────────────────────────────────────────────────
+  // Takes a sessionId, finds all matching HistoryEntry rows, renders a PDF.
 
-  const exportBillPDF = useCallback(async (entry: HistoryEntry) => {
-    const e = entry as any;
-    const dateStr = new Date(e.timestamp ?? Date.now()).toLocaleString();
-    const items: any[] = e.items ?? [];
+  const exportBillPDF = useCallback(async (sessionId: string) => {
+    // Get all entries for this session
+    const entries = history.filter((e) => e.sessionId === sessionId);
+    if (entries.length === 0) throw new Error("No entries found for this bill");
 
-    const itemRows = items.map((item: any) => `
+    const first      = entries[0];
+    const dateStr    = new Date(first.date).toLocaleString();
+    const totalAmt   = entries.reduce((s, e) => s + e.amount, 0);
+    const isPaid     = entries.every((e) => e.paid);
+    const isReturned = entries.every((e) => e.returned);
+    const personName = first.personName;
+    const type       = first.type;
+    const shiftId    = first.shiftId;
+
+    const typeColor: Record<TransactionType, string> = {
+      SALE:     "#065f46",
+      PURCHASE: "#1e3a8a",
+      CREDIT:   "#92400e",
+      RETURN:   "#7f1d1d",
+    };
+
+    const itemRows = entries.map((e) => `
       <tr>
-        <td>${item.productName ?? item.name ?? ""}</td>
-        <td style="text-align:center">${item.mode ?? item.type ?? ""}</td>
-        <td style="text-align:center">${item.quantity ?? 1}</td>
-        <td style="text-align:right">${Number(item.price ?? 0).toFixed(2)}</td>
-        <td style="text-align:right">${(Number(item.price ?? 0) * Number(item.quantity ?? 1)).toFixed(2)}</td>
+        <td>${escapeCSV(e.name)}</td>
+        <td style="text-align:center">${e.barcode}</td>
+        <td style="text-align:center;color:${typeColor[e.type]}">${e.type}</td>
+        <td style="text-align:center">${e.qty}</td>
+        <td style="text-align:right">${e.unitPrice.toFixed(2)}</td>
+        <td style="text-align:right">${e.amount.toFixed(2)}</td>
       </tr>`).join("");
 
     const html = `<!DOCTYPE html>
@@ -483,33 +533,35 @@ td{padding:7px 10px;border-bottom:1px solid #eee}
 .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 .paid{background:#d1fae5;color:#065f46}
 .unpaid{background:#fee2e2;color:#991b1b}
+.ret{background:#fef3c7;color:#92400e}
 .footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#999;text-align:center}
 </style></head><body>
 <h1>Invoice / Bill</h1>
 <div class="meta">
-  <div><strong>Bill #:</strong> ${String(e.id ?? "").slice(-8).toUpperCase()}</div>
+  <div><strong>Session #:</strong> ${sessionId.slice(-8).toUpperCase()}</div>
   <div><strong>Date:</strong> ${dateStr}</div>
-  <div><strong>Type:</strong> ${e.type ?? e.mode ?? ""}</div>
-  ${e.personName ? `<div><strong>Customer:</strong> ${e.personName}</div>` : ""}
-  ${e.shiftId ? `<div><strong>Shift:</strong> ${e.shiftId}</div>` : ""}
+  <div><strong>Type:</strong> ${type}</div>
+  ${personName ? `<div><strong>Customer:</strong> ${personName}</div>` : ""}
+  ${shiftId    ? `<div><strong>Shift:</strong> ${shiftId}</div>`       : ""}
   <div style="margin-top:6px">
-    <span class="badge ${e.paid ? "paid" : "unpaid"}">${e.paid ? "PAID" : "UNPAID"}</span>
-    ${e.returned ? '<span class="badge" style="background:#fef3c7;color:#92400e;margin-left:6px">RETURNED</span>' : ""}
+    <span class="badge ${isPaid ? "paid" : "unpaid"}">${isPaid ? "PAID" : "UNPAID"}</span>
+    ${isReturned ? '<span class="badge ret" style="margin-left:6px">RETURNED</span>' : ""}
   </div>
 </div>
 <table>
   <thead><tr>
     <th>Product</th>
-    <th style="text-align:center">Mode</th>
+    <th style="text-align:center">Barcode</th>
+    <th style="text-align:center">Type</th>
     <th style="text-align:center">Qty</th>
     <th style="text-align:right">Unit Price</th>
-    <th style="text-align:right">Subtotal</th>
+    <th style="text-align:right">Amount</th>
   </tr></thead>
   <tbody>${itemRows}</tbody>
 </table>
 <table class="totals">
-  <tr><td>Subtotal</td><td>${Number(e.total ?? 0).toFixed(2)}</td></tr>
-  <tr class="grand"><td>Total</td><td>${Number(e.total ?? 0).toFixed(2)}</td></tr>
+  <tr><td>Subtotal</td><td>${totalAmt.toFixed(2)}</td></tr>
+  <tr class="grand"><td>Total</td><td>${totalAmt.toFixed(2)}</td></tr>
 </table>
 <div class="footer">Inventory Scanner · ${new Date().toLocaleDateString()}</div>
 </body></html>`;
@@ -517,7 +569,7 @@ td{padding:7px 10px;border-bottom:1px solid #eee}
     const { uri } = await Print.printToFileAsync({ html, base64: false });
     let shareUri = uri;
     if (Platform.OS === "android") {
-      const dest = FileSystem.cacheDirectory + `bill_${String(e.id ?? Date.now()).slice(-8)}.pdf`;
+      const dest = FileSystem.cacheDirectory + `bill_${sessionId.slice(-8)}.pdf`;
       await FileSystem.copyAsync({ from: uri, to: dest });
       shareUri = dest;
     }
@@ -526,9 +578,9 @@ td{padding:7px 10px;border-bottom:1px solid #eee}
     await Sharing.shareAsync(shareUri, {
       mimeType: "application/pdf",
       UTI: "com.adobe.pdf",
-      dialogTitle: `Bill #${String(e.id ?? "").slice(-8).toUpperCase()}`,
+      dialogTitle: `Bill #${sessionId.slice(-8).toUpperCase()}`,
     });
-  }, []);
+  }, [history]);
 
   // ── context value ─────────────────────────────────────────────────────────
 
