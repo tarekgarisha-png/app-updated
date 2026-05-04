@@ -152,9 +152,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       setLastSynced(now);
       await saveLastSynced(now);
       setSyncStatus("ok");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "unknown";
-      console.error("sync failed", message);
+    } catch {
       setSyncStatus("error");
     }
   }, [syncUrl, refresh]);
