@@ -91,30 +91,9 @@
       "**/*"
     ],
     "plugins": [
-  [
-    "expo-router",
-    {
-      "origin": "https://replit.com/"
-    }
-  ],
-  "expo-font",
-  "expo-web-browser",
-  [
-    "expo-camera",
-    {
-      "cameraPermission": "Allow Qasoda Market to access your camera so you can scan product barcodes."
-    }
-  ],
-  [
-    "expo-av",
-    {
-      "microphonePermission": false
-    }
-  ],
-  "expo-print",
-  "expo-sharing",
-  "expo-document-picker"
-]
+      [
+        "expo-router",
+        {
           "origin": "https://replit.com/"
         }
       ],
@@ -125,7 +104,16 @@
         {
           "cameraPermission": "Allow Qasoda Market to access your camera so you can scan product barcodes."
         }
-      ]
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ],
+      "expo-print",
+      "expo-sharing",
+      "expo-document-picker"
     ],
     "experiments": {
       "typedRoutes": true,
