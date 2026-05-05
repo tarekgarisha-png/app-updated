@@ -1,37 +1,15 @@
-/**
- * ProductList.tsx — High-performance product list
- *
- * Replaces a plain ScrollView/map with FlashList (or FlatList fallback).
- * FlashList recycles cells and only renders what's visible, so adding
- * hundreds of products no longer degrades the UI.
- *
- * Usage:
- *   <ProductList products={products} onPress={handlePress} onDelete={handleDelete} />
- *
- * Install FlashList if not already present:
- *   pnpm --filter inventory-scanner add @shopify/flash-list
- */
-
 import React, { memo, useCallback, useMemo, useState } from "react";
 import {
-  View,
+  FlatList,
+  Platform,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  Platform,
+  View,
 } from "react-native";
 
-// Try FlashList first, fall back to FlatList (both have the same API surface we use)
-let List: React.ComponentType<any>;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  List = require("@shopify/flash-list").FlashList;
-} catch {
-  List = require("react-native").FlatList;
-}
-
-import type { Product } from "./InventoryContext";
+import type { Product } from "@/lib/types";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -43,28 +21,22 @@ interface ProductListProps {
   onEdit?: (product: Product) => void;
 }
 
-// ─── Row component — memo'd so only changed rows re-render ────────────────────
+// ─── Row — memo'd so only changed rows re-render ──────────────────────────────
 
-interface ProductRowProps {
+interface RowProps {
   product: Product;
-  lang: "en" | "ar";
+  isRTL: boolean;
   onPress?: (p: Product) => void;
   onDelete?: (p: Product) => void;
   onEdit?: (p: Product) => void;
 }
 
-const ProductRow = memo(function ProductRow({
-  product,
-  lang,
-  onPress,
-  onDelete,
-  onEdit,
-}: ProductRowProps) {
-  const isRTL = lang === "ar";
-  const lowStock = product.quantity <= product.lowStockThreshold;
+const ProductRow = memo(function ProductRow({ product, isRTL, onPress, onDelete, onEdit }: RowProps) {
+  // Product type uses `stock` and `minStock` (not quantity/lowStockThreshold)
+  const lowStock = product.stock <= product.minStock;
 
-  const handlePress = useCallback(() => onPress?.(product), [product, onPress]);
-  const handleEdit = useCallback(() => onEdit?.(product), [product, onEdit]);
+  const handlePress  = useCallback(() => onPress?.(product),  [product, onPress]);
+  const handleEdit   = useCallback(() => onEdit?.(product),   [product, onEdit]);
   const handleDelete = useCallback(() => onDelete?.(product), [product, onDelete]);
 
   return (
@@ -73,27 +45,28 @@ const ProductRow = memo(function ProductRow({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Left: name + barcode */}
+      {/* Name + barcode */}
       <View style={styles.rowMain}>
-        <Text
-          style={[styles.rowName, isRTL && styles.textRight]}
-          numberOfLines={1}
-        >
-          {product.name}
+        <Text style={[styles.rowName, isRTL && styles.textRight]} numberOfLines={1}>
+          {isRTL && product.nameAr ? product.nameAr : product.name}
         </Text>
         <Text style={[styles.rowBarcode, isRTL && styles.textRight]}>
           {product.barcode}
+          {product.category ? `  ·  ${product.category}` : ""}
         </Text>
       </View>
 
-      {/* Center: quantity pill */}
+      {/* Stock badge */}
       <View style={[styles.qtyBadge, lowStock && styles.qtyBadgeLow]}>
         <Text style={[styles.qtyText, lowStock && styles.qtyTextLow]}>
-          {product.quantity}
+          {product.stock}
+        </Text>
+        <Text style={[styles.qtyUnit, lowStock && styles.qtyTextLow]}>
+          {product.unit}
         </Text>
       </View>
 
-      {/* Right: price + actions */}
+      {/* Price + actions */}
       <View style={styles.rowRight}>
         <Text style={styles.rowPrice}>{product.price.toFixed(2)}</Text>
         <View style={styles.rowActions}>
@@ -115,23 +88,19 @@ const ProductRow = memo(function ProductRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ProductList({
-  products,
-  lang = "en",
-  onPress,
-  onDelete,
-  onEdit,
-}: ProductListProps) {
+export function ProductList({ products, lang = "en", onPress, onDelete, onEdit }: ProductListProps) {
   const [query, setQuery] = useState("");
+  const isRTL = lang === "ar";
 
-  // Filter only when query changes — memoized
   const filtered = useMemo(() => {
     if (!query.trim()) return products;
     const q = query.toLowerCase();
     return products.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
-        p.barcode.toLowerCase().includes(q)
+        p.nameAr.toLowerCase().includes(q) ||
+        p.barcode.toLowerCase().includes(q) ||
+        (p.category ?? "").toLowerCase().includes(q)
     );
   }, [products, query]);
 
@@ -139,57 +108,48 @@ export function ProductList({
     ({ item }: { item: Product }) => (
       <ProductRow
         product={item}
-        lang={lang}
+        isRTL={isRTL}
         onPress={onPress}
         onDelete={onDelete}
         onEdit={onEdit}
       />
     ),
-    [lang, onPress, onDelete, onEdit]
+    [isRTL, onPress, onDelete, onEdit]
   );
 
-  const keyExtractor = useCallback((item: Product) => item.id, []);
-
-  const ListHeader = useMemo(
-    () => (
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[styles.searchInput, lang === "ar" && styles.textRight]}
-          placeholder={lang === "ar" ? "بحث..." : "Search products..."}
-          value={query}
-          onChangeText={setQuery}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        <Text style={styles.countLabel}>
-          {filtered.length} / {products.length}
-        </Text>
-      </View>
-    ),
-    [query, filtered.length, products.length, lang]
-  );
-
-  const ListEmpty = useMemo(
-    () => (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>
-          {lang === "ar" ? "لا توجد منتجات" : "No products found"}
-        </Text>
-      </View>
-    ),
-    [lang]
-  );
+  // Product has no id field — barcode is the unique key
+  const keyExtractor = useCallback((item: Product) => item.barcode, []);
 
   return (
-    <List
+    <FlatList
       data={filtered}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      ListHeaderComponent={ListHeader}
-      ListEmptyComponent={ListEmpty}
-      estimatedItemSize={72} // FlashList hint; ignored by FlatList
+      ListHeaderComponent={
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={[styles.searchInput, isRTL && styles.textRight]}
+            placeholder={isRTL ? "بحث..." : "Search products..."}
+            placeholderTextColor="#8e8e93"
+            value={query}
+            onChangeText={setQuery}
+            clearButtonMode="while-editing"
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          <Text style={styles.countLabel}>
+            {filtered.length} / {products.length}
+          </Text>
+        </View>
+      }
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>
+            {isRTL ? "لا توجد منتجات" : "No products found"}
+          </Text>
+        </View>
+      }
       removeClippedSubviews={Platform.OS === "android"}
       maxToRenderPerBatch={20}
       windowSize={10}
@@ -221,12 +181,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 15,
   },
-  countLabel: {
-    fontSize: 12,
-    color: "#8e8e93",
-    minWidth: 48,
-    textAlign: "right",
-  },
+  countLabel: { fontSize: 12, color: "#8e8e93", minWidth: 48, textAlign: "right" },
 
   row: {
     flexDirection: "row",
@@ -245,15 +200,16 @@ const styles = StyleSheet.create({
   textRight: { textAlign: "right" },
 
   qtyBadge: {
-    minWidth: 36,
+    alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
     backgroundColor: "#e5e5ea",
-    alignItems: "center",
+    minWidth: 40,
   },
   qtyBadgeLow: { backgroundColor: "#ffecd1" },
   qtyText: { fontSize: 13, fontWeight: "700", color: "#3a3a3c" },
+  qtyUnit: { fontSize: 9, color: "#8e8e93" },
   qtyTextLow: { color: "#c84b00" },
 
   rowRight: { alignItems: "flex-end", gap: 4 },
