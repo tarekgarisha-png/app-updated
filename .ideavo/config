@@ -1,0 +1,55 @@
+{
+  "systemSetup": [
+    {
+      "name": "Install pnpm",
+      "command": "npm i -g pnpm"
+    }
+  ],
+  "templateName": "custom",
+  "projectDependencies": [
+    {
+      "name": "Install Dependencies",
+      "command": "pnpm install"
+    }
+  ],
+  "codeChecks": [
+    {
+      "name": "Type Check",
+      "command": "pnpm run typecheck"
+    }
+  ],
+  "buildSteps": [
+    {
+      "name": "Build Project",
+      "command": "pnpm run build"
+    }
+  ],
+  "runStep": [
+    {
+      "name": "Run Dev Server",
+      "command": "pnpm --filter @workspace/mockup-sandbox run dev --port 3000",
+      "port": "3000"
+    }
+  ],
+  "deploySteps": [],
+  "cleanupFiles": [
+    "node_modules",
+    "artifacts/api-server/node_modules",
+    "artifacts/api-server/dist",
+    "artifacts/inventory-scanner/node_modules",
+    "artifacts/mockup-sandbox/node_modules",
+    "artifacts/mockup-sandbox/dist",
+    "lib/api-client-react/node_modules",
+    "lib/api-spec/node_modules",
+    "lib/api-zod/node_modules",
+    "lib/db/node_modules",
+    "scripts/node_modules"
+  ],
+  "packageManager": "pnpm",
+  "envPaths": [
+    {
+      "name": "default",
+      "path": ".env"
+    }
+  ]
+}
