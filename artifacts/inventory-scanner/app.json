@@ -110,10 +110,7 @@
         {
           "microphonePermission": false
         }
-      ],
-      "expo-print",
-      "expo-sharing",
-      "expo-document-picker"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
